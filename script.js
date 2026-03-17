@@ -1,4 +1,5 @@
-const LANDING_DURATION = 2200;
+const INTRO_RELEASE_AT = 1800;
+const LANDING_DURATION = 3000;
 
 const getStarCount = () => {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -59,6 +60,7 @@ const syncVisibilityState = () => {
 };
 
 const startLanding = () => {
+  const introOverlay = document.querySelector(".intro-overlay");
   const starField = createStars();
 
   requestAnimationFrame(() => {
@@ -66,6 +68,14 @@ const startLanding = () => {
       document.body.classList.add("is-loaded");
     });
   });
+
+  window.setTimeout(() => {
+    document.body.classList.add("is-intro-complete");
+
+    if (introOverlay) {
+      window.setTimeout(() => introOverlay.remove(), 900);
+    }
+  }, INTRO_RELEASE_AT);
 
   window.setTimeout(() => {
     document.body.classList.add("is-settled");

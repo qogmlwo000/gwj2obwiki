@@ -34,6 +34,195 @@ body {
   font-weight: 500;
 }
 
+.intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(245, 237, 225, 0.14), transparent 14%),
+    linear-gradient(180deg, rgba(12, 8, 5, 0.98), rgba(28, 19, 12, 0.98) 52%, rgba(9, 6, 4, 0.99) 100%);
+  transform: translateZ(0);
+  will-change: opacity, transform;
+}
+
+.intro-overlay::before,
+.intro-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.intro-overlay::before {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018), transparent 14%, transparent 86%, rgba(255, 255, 255, 0.018)),
+    radial-gradient(circle at 50% 10%, rgba(255, 248, 236, 0.22), transparent 16%);
+  opacity: 0.8;
+  animation: introAmbient 2.5s ease-out both;
+}
+
+.intro-overlay::after {
+  inset: 10% 12%;
+  border: 1px solid rgba(188, 158, 107, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(245, 237, 225, 0.04);
+  opacity: 0;
+  animation: introFrame 1.4s ease-out 0.2s both;
+}
+
+.intro-curtain,
+.intro-glow,
+.intro-emblem,
+.intro-seal {
+  position: absolute;
+  will-change: transform, opacity;
+}
+
+.intro-curtain {
+  top: -6%;
+  bottom: -6%;
+  width: 52%;
+  background:
+    linear-gradient(180deg, rgba(63, 46, 30, 0.98), rgba(34, 24, 16, 0.98)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.015) 0 4px, transparent 4px 24px);
+  box-shadow:
+    inset 0 0 0 1px rgba(245, 237, 225, 0.05),
+    inset 0 0 42px rgba(0, 0, 0, 0.22);
+}
+
+.intro-curtain::before,
+.intro-curtain::after {
+  content: "";
+  position: absolute;
+  top: 8%;
+  bottom: 8%;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(245, 237, 225, 0.12), transparent);
+}
+
+.curtain-left {
+  left: -2%;
+  border-right: 1px solid rgba(188, 158, 107, 0.18);
+  animation: curtainOpenLeft 1.55s cubic-bezier(.2, .72, .12, 1) 0.65s both;
+}
+
+.curtain-left::before {
+  right: 18px;
+}
+
+.curtain-left::after {
+  right: 36px;
+}
+
+.curtain-right {
+  right: -2%;
+  border-left: 1px solid rgba(188, 158, 107, 0.18);
+  animation: curtainOpenRight 1.55s cubic-bezier(.2, .72, .12, 1) 0.65s both;
+}
+
+.curtain-right::before {
+  left: 18px;
+}
+
+.curtain-right::after {
+  left: 36px;
+}
+
+.intro-glow {
+  inset: -10%;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 249, 239, 0.84) 0 0.8%, rgba(245, 237, 225, 0.2) 8%, transparent 22%),
+    radial-gradient(circle at 50% 44%, rgba(193, 160, 102, 0.16), transparent 26%);
+  opacity: 0;
+  animation: introGlow 1.8s ease-out 0.18s both;
+}
+
+.intro-emblem {
+  left: 50%;
+  top: 50%;
+  width: min(420px, calc(100vw - 3rem));
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation: introEmblemExit 0.8s ease 1.55s both;
+}
+
+.intro-emblem::before,
+.intro-emblem::after {
+  content: "";
+  position: absolute;
+  top: 78px;
+  width: min(120px, 24vw);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(188, 158, 107, 0.75), transparent);
+  opacity: 0;
+  animation: introOrnament 1.1s ease-out 0.45s both;
+}
+
+.intro-emblem::before {
+  left: 0;
+}
+
+.intro-emblem::after {
+  right: 0;
+}
+
+.intro-seal {
+  position: relative;
+  left: 50%;
+  width: clamp(118px, 16vw, 164px);
+  aspect-ratio: 1;
+  transform: translateX(-50%) scale(0.72);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 28%, rgba(255, 248, 234, 0.22), transparent 36%),
+    linear-gradient(180deg, rgba(141, 103, 55, 0.98), rgba(78, 54, 28, 0.98));
+  border: 1px solid rgba(220, 192, 141, 0.42);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 245, 227, 0.15),
+    0 18px 40px rgba(0, 0, 0, 0.38);
+  opacity: 0;
+  animation: sealStamp 1.2s cubic-bezier(.18, .8, .18, 1) 0.05s both;
+}
+
+.intro-seal::before,
+.intro-seal::after {
+  content: "";
+  position: absolute;
+  inset: 11px;
+  border-radius: 50%;
+  border: 1px solid rgba(245, 237, 225, 0.16);
+}
+
+.intro-seal::after {
+  inset: 22px;
+  border-color: rgba(245, 237, 225, 0.1);
+}
+
+.intro-seal-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 4vw, 2.3rem);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: rgba(255, 248, 236, 0.95);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.24);
+}
+
+.intro-label {
+  margin: 1.35rem 0 0;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: rgba(245, 237, 225, 0.76);
+  opacity: 0;
+  animation: introLabelIn 1s ease-out 0.38s both;
+}
+
 .page-shell {
   position: relative;
   min-height: 100vh;
@@ -169,7 +358,7 @@ body {
     radial-gradient(circle at center, rgba(180, 143, 83, 0.12), transparent 52%);
   opacity: 0;
   transform: scale(0.35);
-  animation: arrivalBurst 1.35s ease-out 1 forwards;
+  animation: arrivalBurst 1.5s ease-out 1.1s forwards;
 }
 
 .hero {
@@ -180,6 +369,8 @@ body {
   padding: 4rem 1.5rem 11rem;
   transform: translateZ(0);
   animation: titleReveal 1.05s cubic-bezier(.17, .88, .32, 1) both;
+  animation-delay: 0.92s;
+  animation-play-state: paused;
 }
 
 .hero-kicker {
@@ -266,6 +457,8 @@ body {
     0 4px 12px rgba(127, 93, 51, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
   animation: panelRise 1.15s cubic-bezier(.16, .77, .23, .99) both;
+  animation-delay: 1.28s;
+  animation-play-state: paused;
   will-change: transform, opacity;
   overflow: hidden;
 }
@@ -404,11 +597,18 @@ body {
   color: #5a4022;
 }
 
+body.is-loaded .hero,
 body.is-loaded .hero-title,
 body.is-loaded .status-panel,
 body.is-loaded .hero-kicker,
 body.is-loaded .hero-subtitle {
   animation-play-state: running;
+}
+
+body.is-intro-complete .intro-overlay {
+  opacity: 0;
+  transform: scale(1.02);
+  transition: opacity 0.75s ease, transform 0.75s ease;
 }
 
 body.is-settled .warp-layer,
@@ -425,6 +625,15 @@ body.is-settled .warp-ring {
 
 body.is-paused .page-shell::before,
 body.is-paused .page-shell::after,
+body.is-paused .intro-overlay::before,
+body.is-paused .intro-overlay::after,
+body.is-paused .intro-curtain,
+body.is-paused .intro-glow,
+body.is-paused .intro-emblem,
+body.is-paused .intro-emblem::before,
+body.is-paused .intro-emblem::after,
+body.is-paused .intro-seal,
+body.is-paused .intro-label,
 body.is-paused .warp-layer,
 body.is-paused .warp-ring,
 body.is-paused .noise-grid,
@@ -437,6 +646,108 @@ body.is-paused .progress-fill::before,
 body.is-paused .progress-fill::after,
 body.is-paused .star {
   animation-play-state: paused !important;
+}
+
+@keyframes introAmbient {
+  0% {
+    opacity: 0.2;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 0.82;
+    transform: scale(1);
+  }
+}
+
+@keyframes introFrame {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes sealStamp {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.55);
+  }
+  42% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@keyframes introGlow {
+  0% {
+    opacity: 0;
+    transform: scale(0.78);
+  }
+  34% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0.46;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes introLabelIn {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes introOrnament {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.3);
+  }
+  100% {
+    opacity: 0.9;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes curtainOpenLeft {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-104%);
+  }
+}
+
+@keyframes curtainOpenRight {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(104%);
+  }
+}
+
+@keyframes introEmblemExit {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -52%) scale(0.94);
+  }
 }
 
 @keyframes arrivalBurst {
@@ -633,6 +944,17 @@ body.is-paused .star {
 }
 
 @media (max-width: 640px) {
+  .intro-emblem::before,
+  .intro-emblem::after {
+    width: min(74px, 18vw);
+    top: 62px;
+  }
+
+  .intro-label {
+    letter-spacing: 0.2em;
+    font-size: 0.7rem;
+  }
+
   .hero {
     padding-bottom: 12.5rem;
   }
@@ -684,6 +1006,7 @@ body.is-paused .star {
   }
 
   .page-shell::after,
+  .intro-overlay,
   .warp-layer-mid,
   .noise-grid,
   .light-burst,
