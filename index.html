@@ -3,54 +3,743 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GWJ2 OB WIKI</title>
+  <title>GWJ2 OB 운영 허브</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Playfair+Display:wght@700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-  <div class="intro-overlay" aria-hidden="true">
-    <div class="intro-curtain curtain-left"></div>
-    <div class="intro-curtain curtain-right"></div>
-    <div class="intro-glow"></div>
-    <div class="intro-emblem">
-      <div class="intro-seal">
-        <span class="intro-seal-text">GWJ2</span>
+<body class="is-auth-locked">
+  <div class="ambient-backdrop" aria-hidden="true">
+    <span class="ambient-orb orb-blue"></span>
+    <span class="ambient-orb orb-pink"></span>
+    <span class="ambient-orb orb-mint"></span>
+    <span class="ambient-grid"></span>
+    <span class="cursor-glow" data-cursor-glow></span>
+  </div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <span class="brand-chip">Operation Pulse</span>
+        <h1 class="brand-title">
+          <span class="brand-mark">GWJ2</span>
+          <span class="brand-sub">OB</span>
+        </h1>
+        <p class="brand-description">현장 이슈 · 인수인계 · SNOP 흐름까지 한눈에 보는 운영 커맨드 센터.</p>
       </div>
-      <p class="intro-label">OB WIKI OPEN</p>
+
+      <div class="topbar-stats" aria-label="stats">
+        <article class="mini-stat">
+          <span class="mini-stat-label">&#xAC8C;&#xC2DC;&#xAE00;</span>
+          <strong class="mini-stat-value" data-post-count>0</strong>
+        </article>
+        <article class="mini-stat">
+          <span class="mini-stat-label">&#xB313;&#xAE00;</span>
+          <strong class="mini-stat-value" data-comment-count>0</strong>
+        </article>
+        <article class="mini-stat">
+          <span class="mini-stat-label">&#xC88B;&#xC544;&#xC694;</span>
+          <strong class="mini-stat-value" data-like-count>0</strong>
+        </article>
+        <article class="mini-stat">
+          <span class="mini-stat-label">&#xBA58;&#xC158;</span>
+          <strong class="mini-stat-value" data-mention-count>0</strong>
+        </article>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="테마 전환">
+          <span class="theme-toggle-track" aria-hidden="true">
+            <span class="theme-toggle-icon theme-toggle-icon-sun">☀</span>
+            <span class="theme-toggle-icon theme-toggle-icon-moon">☾</span>
+            <span class="theme-toggle-thumb"></span>
+          </span>
+          <span class="theme-toggle-label" data-theme-toggle-label>다크</span>
+        </button>
+        <button class="ghost-button" type="button" data-open-settings>&#xD504;&#xB85C;&#xD544; &#xC124;&#xC815;</button>
+
+        <div class="user-panel" aria-label="signed in user" hidden>
+          <div class="user-panel-avatar">
+            <img class="avatar-image" data-user-avatar-image alt="">
+            <span class="avatar-fallback" data-user-avatar-fallback>G</span>
+          </div>
+          <div class="user-panel-copy">
+            <span class="user-panel-label">&#xD604;&#xC7AC; &#xC0AC;&#xC6A9;&#xC790;</span>
+            <strong class="user-panel-name" data-user-name></strong>
+            <span class="user-panel-role" data-user-position></span>
+          </div>
+          <button class="ghost-button user-panel-logout" type="button" data-logout-button>&#xB85C;&#xADF8;&#xC544;&#xC6C3;</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="board-card">
+      <div class="board-card-head">
+        <div class="board-card-copy">
+          <span class="section-chip">&#xAC8C;&#xC2DC;&#xD310; &#xC120;&#xD0DD;</span>
+          <h2 class="board-card-title" data-current-board-title></h2>
+          <p class="board-card-description" data-current-board-description></p>
+        </div>
+        <div class="board-card-meta">
+          <div class="current-board-badges">
+            <span class="board-badge board-badge-main" data-current-board-badge></span>
+            <span class="board-badge board-badge-sub" data-current-subtab-badge hidden></span>
+          </div>
+          <p class="board-card-note">&#xC0C9;&#xC0C1; &#xBC30;&#xC9C0;&#xB97C; &#xD1B5;&#xD574; &#xAC8C;&#xC2DC;&#xD310;&#xACFC; &#xC138;&#xBD80; &#xB77C;&#xC778;&#xC744; &#xD55C;&#xB208;&#xC5D0; &#xAD6C;&#xBD84;&#xD560; &#xC218; &#xC788;&#xAC8C; &#xC815;&#xB9AC;&#xD588;&#xC2B5;&#xB2C8;&#xB2E4;.</p>
+        </div>
+      </div>
+
+      <div class="board-tabs" role="tablist" aria-label="community boards">
+        <button class="board-tab is-active board-tab-handover" type="button" data-board-tab="handover">&#xC8FC;/&#xC57C;&#xAC04; &#xC778;&#xC218;&#xC778;&#xACC4;</button>
+        <button class="board-tab board-tab-operations" type="button" data-board-tab="operations">&#xC6B4;&#xC601;&#xAC04; &#xC218;&#xC815; &#xBC0F; &#xCD94;&#xAC00;&#xC0AC;&#xD56D;</button>
+        <button class="board-tab board-tab-knowledge" type="button" data-board-tab="knowledge">&#xC9C0;&#xC2DD;&#xC778; &#xACF5;&#xC720;&#xBC29;</button>
+        <button class="board-tab board-tab-request" type="button" data-board-tab="request">&#xAC1C;&#xC120; &#xD544;&#xC694; &#xC694;&#xCCAD;&#xC0AC;&#xD56D;</button>
+      </div>
+
+      <div class="handover-shell">
+        <div class="handover-head">
+          <div>
+            <strong class="handover-title">&#xC8FC;/&#xC57C;&#xAC04; &#xC778;&#xC218;&#xC778;&#xACC4; &#xC138;&#xBD80; &#xD0ED;</strong>
+            <p class="handover-description">&#xC778;&#xC218;&#xC778;&#xACC4; &#xAC8C;&#xC2DC;&#xD310;&#xC740; &#xC7A5;&#xBE44;/&#xB77C;&#xC778; &#xAE30;&#xC900;&#xC73C;&#xB85C; &#xB354; &#xC139;&#xC14C;&#xD558;&#xAC8C; &#xB098;&#xB220;&#xC11C; &#xBCFC; &#xC218; &#xC788;&#xC2B5;&#xB2C8;&#xB2E4;.</p>
+          </div>
+          <button class="ghost-button handover-toggle" type="button" data-handover-toggle aria-expanded="false"></button>
+        </div>
+
+        <div class="handover-subtabs" data-handover-panel hidden>
+          <button class="handover-chip tone-it is-active" type="button" data-handover-tab="it-equipment">IT &#xC7A5;&#xBE44;</button>
+          <button class="handover-chip tone-agv" type="button" data-handover-tab="agv">AGV</button>
+          <button class="handover-chip tone-ace" type="button" data-handover-tab="ace">ACE</button>
+          <button class="handover-chip tone-manual" type="button" data-handover-tab="manual-pack">ManualPack</button>
+          <button class="handover-chip tone-autobag" type="button" data-handover-tab="autobag">Autobag</button>
+          <button class="handover-chip tone-six" type="button" data-handover-tab="6f-pick">6F PICK</button>
+          <button class="handover-chip tone-seven-two" type="button" data-handover-tab="7-2f-pick">7-2F PICK</button>
+          <button class="handover-chip tone-seven-three" type="button" data-handover-tab="7-3f-pick">7-3F PICK</button>
+          <button class="handover-chip tone-eight" type="button" data-handover-tab="8f-orderpicker">8F (Orderpicker) PICK</button>
+        </div>
+      </div>
+    </section>
+
+    <main class="workspace">
+      <section class="content-column">
+        <section class="hero-card">
+          <div class="hero-main">
+            <div class="hero-copy">
+              <span class="hero-badge" data-hero-badge></span>
+              <h2 class="hero-title" data-hero-title></h2>
+              <p class="hero-description" data-hero-description></p>
+            </div>
+
+            <div class="hero-metrics">
+              <article class="hero-metric">
+                <span class="hero-metric-label">&#xD604;&#xC7AC; &#xD53C;&#xB4DC;</span>
+                <strong class="hero-metric-value" data-hero-posts>0</strong>
+              </article>
+              <article class="hero-metric">
+                <span class="hero-metric-label">&#xBA58;&#xC158; &#xC54C;&#xB9BC;</span>
+                <strong class="hero-metric-value" data-hero-mentions>0</strong>
+              </article>
+              <article class="hero-metric">
+                <span class="hero-metric-label">&#xC88B;&#xC544;&#xC694; &#xBC18;&#xC751;</span>
+                <strong class="hero-metric-value" data-hero-likes>0</strong>
+              </article>
+            </div>
+          </div>
+
+          <section class="snop-panel" aria-labelledby="snop-panel-title">
+            <div class="snop-panel-head">
+              <div class="snop-panel-copy">
+                <span class="section-chip snop-panel-chip">Weekly SNOP</span>
+                <h3 class="snop-panel-title" id="snop-panel-title">이번 주 SNOP 동향</h3>
+                <p class="snop-panel-description">일요일부터 토요일까지 주간 순서로 SNOP를 보여주고, 막대와 점선 추세선을 함께 확인할 수 있도록 정리했습니다.</p>
+              </div>
+
+              <form class="snop-form" data-snop-form novalidate>
+                <div class="snop-field snop-field-week">
+                  <span class="snop-field-label">&#xAE30;&#xC900;&#xC77C;</span>
+                  <div class="snop-week-selector" data-snop-week-selector></div>
+                  <input type="hidden" name="date">
+                </div>
+
+                <label class="snop-field snop-field-value">
+                  <span class="snop-field-label">SNOP</span>
+                  <input class="text-input snop-input" type="number" name="value" min="0" max="9999" step="0.1" placeholder="&#xC608; 98.4">
+                </label>
+
+                <button class="primary-button snop-submit" type="submit">SNOP &#xC800;&#xC7A5;</button>
+              </form>
+            </div>
+
+            <p class="form-feedback snop-feedback" data-snop-feedback hidden></p>
+
+            <div class="snop-summary-grid">
+              <article class="snop-stat-card is-today">
+                <span class="snop-stat-label">&#xC624;&#xB298; SNOP</span>
+                <strong class="snop-stat-value" data-snop-today-value>-</strong>
+                <span class="snop-stat-meta" data-snop-today-meta">&#xC624;&#xB298; &#xAE30;&#xC900; &#xAC12;&#xC744; &#xD45C;&#xC2DC;&#xD569;&#xB2C8;&#xB2E4;.</span>
+              </article>
+
+              <article class="snop-stat-card">
+                <span class="snop-stat-label">7&#xC77C; &#xD3C9;&#xADE0;</span>
+                <strong class="snop-stat-value" data-snop-average-value>-</strong>
+                <span class="snop-stat-meta" data-snop-average-meta">&#xC785;&#xB825;&#xB41C; &#xB370;&#xC774;&#xD130; &#xAE30;&#xC900;</span>
+              </article>
+
+              <article class="snop-stat-card">
+                <span class="snop-stat-label">&#xCD5C;&#xACE0; &#xAC12;</span>
+                <strong class="snop-stat-value" data-snop-peak-value>-</strong>
+                <span class="snop-stat-meta" data-snop-peak-meta">&#xC77C;&#xC8FC;&#xC77C; &#xB0B4; &#xCD5C;&#xACE0; &#xC2DC;&#xC810;</span>
+              </article>
+
+              <article class="snop-stat-card">
+                <span class="snop-stat-label">&#xC804;&#xC77C; &#xB300;&#xBE44;</span>
+                <strong class="snop-stat-value" data-snop-delta-value>-</strong>
+                <span class="snop-stat-meta" data-snop-delta-meta">&#xC624;&#xB298;&#xACFC; &#xC5B4;&#xC81C; &#xBE44;&#xAD50;</span>
+              </article>
+            </div>
+
+            <div class="snop-chart-shell">
+              <div class="snop-chart-head">
+                <span class="snop-chart-range" data-snop-range></span>
+                <span class="snop-chart-caption" data-snop-caption></span>
+              </div>
+              <div class="snop-chart-surface" data-snop-chart></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="composer-card">
+          <div class="composer-head">
+            <div>
+              <h2 class="section-title">&#xC0C8; &#xAE00; &#xC791;&#xC131;</h2>
+              <p class="section-subtitle">&#xD604;&#xC7AC; &#xC120;&#xD0DD;&#xD55C; &#xAC8C;&#xC2DC;&#xD310;&#xC5D0; &#xBC14;&#xB85C; &#xAE00;&#xC744; &#xC62C;&#xB9B4; &#xC218; &#xC788;&#xB3C4;&#xB85D; &#xC791;&#xC131; &#xC601;&#xC5ED;&#xC744; &#xB354; &#xC815;&#xB3C8;&#xD588;&#xC2B5;&#xB2C8;&#xB2E4;.</p>
+            </div>
+
+            <div class="compose-target">
+              <span class="compose-target-label">&#xC791;&#xC131; &#xC704;&#xCE58;</span>
+              <div class="compose-target-badges">
+                <span class="board-badge board-badge-main" data-compose-board-badge></span>
+                <span class="board-badge board-badge-sub" data-compose-subtab-badge hidden></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="composer-layout">
+            <form class="post-form" data-post-form>
+              <label class="input-group">
+                <span class="input-label">&#xC81C;&#xBAA9;</span>
+                <input class="text-input" type="text" name="title" maxlength="90" placeholder="&#xC81C;&#xBAA9;&#xC744; &#xC785;&#xB825;&#xD558;&#xC138;&#xC694;">
+              </label>
+
+              <label class="input-group">
+                <span class="input-label">&#xB0B4;&#xC6A9;</span>
+                <div class="textarea-shell" data-compose-key="post">
+                  <textarea class="text-input text-area js-mention-input" name="content" maxlength="800" placeholder="&#xC778;&#xC218;&#xC778;&#xACC4;, &#xC791;&#xC5C5; &#xBA54;&#xBAA8;, &#xACF5;&#xC720; &#xD301;, &#xAC1C;&#xC120; &#xC694;&#xCCAD; &#xB0B4;&#xC6A9;&#xC744; &#xC790;&#xC720;&#xB86D;&#xAC8C; &#xC785;&#xB825;&#xD558;&#xC138;&#xC694;" data-compose-input="post"></textarea>
+                  <div class="mention-box" data-mention-box="post" hidden></div>
+                </div>
+              </label>
+
+              <div class="attachment-grid">
+                <div class="upload-card">
+                  <div class="upload-copy">
+                    <strong>&#xC774;&#xBBF8;&#xC9C0; &#xCCA8;&#xBD80;</strong>
+                    <span data-post-image-name>&#xC120;&#xD0DD;&#xB41C; &#xC774;&#xBBF8;&#xC9C0;&#xAC00; &#xC5C6;&#xC2B5;&#xB2C8;&#xB2E4;.</span>
+                  </div>
+                  <div class="upload-actions">
+                    <label class="secondary-button upload-button">
+                      <input type="file" accept="image/*" data-post-image-input hidden>
+                      <span>&#xC774;&#xBBF8;&#xC9C0; &#xC120;&#xD0DD;</span>
+                    </label>
+                    <button class="ghost-button" type="button" data-clear-post-image>&#xC9C0;&#xC6B0;&#xAE30;</button>
+                  </div>
+                </div>
+
+                <div class="upload-card">
+                  <div class="upload-copy">
+                    <strong>&#xD30C;&#xC77C; &#xCCA8;&#xBD80;</strong>
+                    <span data-post-file-name>&#xC120;&#xD0DD;&#xB41C; &#xD30C;&#xC77C;&#xC774; &#xC5C6;&#xC2B5;&#xB2C8;&#xB2E4;.</span>
+                  </div>
+                  <div class="upload-actions">
+                    <label class="secondary-button upload-button">
+                      <input type="file" data-post-file-input hidden>
+                      <span>&#xD30C;&#xC77C; &#xC120;&#xD0DD;</span>
+                    </label>
+                    <button class="ghost-button" type="button" data-clear-post-file>&#xC9C0;&#xC6B0;&#xAE30;</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="attachment-preview" data-post-attachment-preview hidden>
+                <div class="attachment-image-box" data-post-image-preview-box hidden>
+                  <img class="attachment-image" data-post-image-preview alt="">
+                </div>
+                <div class="attachment-file-box" data-post-file-preview-box hidden>
+                  <span class="file-pill" data-post-file-preview-name></span>
+                </div>
+              </div>
+
+              <div class="composer-toolbar">
+                <div class="emoji-row" data-emoji-row="post"></div>
+                <p class="composer-tip">@&#xB2C9;&#xB124;&#xC784; &#xBA58;&#xC158;, &#xC774;&#xBAA8;&#xC9C0; &#xBC18;&#xC751;, &#xCCA8;&#xBD80; &#xC5C5;&#xB85C;&#xB4DC;&#xB97C; &#xD55C; &#xD750;&#xB984;&#xC5D0;&#xC11C; &#xC4F8; &#xC218; &#xC788;&#xAC8C; &#xC815;&#xB9AC;&#xD588;&#xC2B5;&#xB2C8;&#xB2E4;.</p>
+              </div>
+
+              <p class="form-feedback" data-post-feedback hidden></p>
+
+              <div class="composer-actions">
+                <span class="compose-count" data-compose-count>0 / 800</span>
+                <button class="primary-button" type="submit">&#xAC8C;&#xC2DC;&#xD558;&#xAE30;</button>
+              </div>
+            </form>
+
+            <article class="preview-card">
+              <div class="preview-head">
+                <span class="preview-badge">&#xBBF8;&#xB9AC;&#xBCF4;&#xAE30;</span>
+                <h3 class="preview-title">&#xC2E4;&#xC2DC;&#xAC04; &#xBBF8;&#xB9AC;&#xBCF4;&#xAE30;</h3>
+              </div>
+
+              <div class="preview-body">
+                <div class="preview-badges">
+                  <span class="board-badge board-badge-main" data-preview-board-badge></span>
+                  <span class="board-badge board-badge-sub" data-preview-subtab-badge hidden></span>
+                </div>
+                <strong class="preview-post-title" data-preview-title></strong>
+                <div class="preview-post-content" data-preview-content></div>
+                <div class="preview-attachment" data-preview-attachment hidden>
+                  <img class="preview-attachment-image" data-preview-image alt="" hidden>
+                  <span class="file-pill" data-preview-file hidden></span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="feed-card">
+          <div class="feed-head">
+            <div>
+              <h2 class="section-title">&#xAC8C;&#xC2DC;&#xD310; &#xD53C;&#xB4DC;</h2>
+              <p class="section-subtitle">&#xC120;&#xD0DD;&#xD55C; &#xD0ED; &#xAE30;&#xC900;&#xC73C;&#xB85C; &#xCD5C;&#xC2E0; &#xD750;&#xB984;&#xACFC; &#xBC18;&#xC751;&#xC744; &#xB9D0;&#xAE54;&#xB054;&#xD558;&#xAC8C; &#xBCF4;&#xC5EC;&#xC90D;&#xB2C8;&#xB2E4;.</p>
+            </div>
+
+            <div class="feed-filters" role="tablist" aria-label="feed filters">
+              <button class="filter-button is-active" type="button" data-feed-filter="latest">&#xCD5C;&#xC2E0;&#xC21C;</button>
+              <button class="filter-button" type="button" data-feed-filter="likes">&#xC88B;&#xC544;&#xC694;&#xC21C;</button>
+              <button class="filter-button" type="button" data-feed-filter="mentions">&#xB0B4; &#xBA58;&#xC158;&#xB9CC;</button>
+            </div>
+          </div>
+
+          <div class="post-list" data-post-list></div>
+        </section>
+      </section>
+
+      <aside class="side-column">
+        <section class="profile-card">
+          <div class="section-title-row">
+            <span class="section-dot"></span>
+            <h2 class="section-title">&#xB0B4; &#xD504;&#xB85C;&#xD544;</h2>
+          </div>
+
+          <div class="profile-shell">
+            <div class="profile-avatar-shell">
+              <img class="avatar-image" data-profile-avatar-image alt="">
+              <span class="avatar-fallback" data-profile-avatar-fallback>G</span>
+            </div>
+            <div class="profile-copy">
+              <strong class="profile-name" data-profile-name>GWJ2</strong>
+              <span class="profile-role" data-profile-position>&#xB85C;&#xADF8;&#xC778; &#xB300;&#xAE30;</span>
+            </div>
+          </div>
+
+          <p class="profile-note" data-profile-note>&#xB85C;&#xADF8;&#xC778;&#xD558;&#xBA74; &#xB2C9;&#xB124;&#xC784;, &#xD504;&#xB85C;&#xD544; &#xC774;&#xBBF8;&#xC9C0;, &#xBE44;&#xBC00;&#xBC88;&#xD638; &#xC124;&#xC815;&#xC744; &#xC5EC;&#xAE30;&#xC11C; &#xAD00;&#xB9AC;&#xD560; &#xC218; &#xC788;&#xC2B5;&#xB2C8;&#xB2E4;.</p>
+
+          <div class="profile-actions">
+            <button class="secondary-button" type="button" data-open-settings>&#xD504;&#xB85C;&#xD544; &#xC124;&#xC815;</button>
+          </div>
+        </section>
+
+        <section class="calendar-card" aria-labelledby="calendar-title">
+          <div class="section-title-row">
+            <span class="section-dot"></span>
+            <h2 class="section-title" id="calendar-title">운영 캘린더</h2>
+          </div>
+
+          <div class="calendar-head">
+            <div class="calendar-nav">
+              <button class="calendar-nav-btn" type="button" data-calendar-prev aria-label="이전 달">‹</button>
+              <strong class="calendar-title" data-calendar-title></strong>
+              <button class="calendar-nav-btn" type="button" data-calendar-next aria-label="다음 달">›</button>
+            </div>
+            <button class="calendar-today-btn" type="button" data-calendar-today>오늘</button>
+          </div>
+
+          <div class="calendar-categories" data-calendar-categories role="tablist" aria-label="카테고리 필터"></div>
+
+          <div class="calendar-weekdays" aria-hidden="true">
+            <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+          </div>
+
+          <div class="calendar-grid" data-calendar-grid></div>
+
+          <div class="calendar-events">
+            <div class="calendar-events-head">
+              <strong class="calendar-events-title" data-calendar-events-title>이번 달 이벤트</strong>
+              <button class="calendar-add-btn" type="button" data-calendar-add>+ 이벤트 추가</button>
+            </div>
+            <ul class="calendar-event-list" data-calendar-event-list></ul>
+          </div>
+        </section>
+
+        <div class="calendar-modal" data-calendar-modal hidden>
+          <div class="calendar-modal-shell" role="dialog" aria-modal="true" aria-labelledby="calendar-modal-title">
+            <div class="calendar-modal-head">
+              <h3 class="calendar-modal-title" id="calendar-modal-title">이벤트 추가</h3>
+              <button class="ghost-button" type="button" data-calendar-modal-close>닫기</button>
+            </div>
+            <form class="calendar-form" data-calendar-form>
+              <label class="input-group">
+                <span class="input-label">날짜</span>
+                <input class="text-input" type="date" name="date" required>
+              </label>
+              <label class="input-group">
+                <span class="input-label">카테고리</span>
+                <select class="text-input" name="category" data-calendar-category-select></select>
+              </label>
+              <label class="input-group">
+                <span class="input-label">제목</span>
+                <input class="text-input" type="text" name="title" maxlength="60" required placeholder="예) 월간 점검, 교대 근무 변경">
+              </label>
+              <label class="input-group">
+                <span class="input-label">상세 메모 (선택)</span>
+                <textarea class="text-input text-area" name="note" maxlength="200" placeholder="간단 메모"></textarea>
+              </label>
+              <p class="form-feedback" data-calendar-feedback hidden></p>
+              <div class="calendar-form-actions">
+                <button class="ghost-button" type="button" data-calendar-modal-close>취소</button>
+                <button class="primary-button" type="submit">저장</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <section class="mention-card">
+          <div class="section-title-row">
+            <span class="section-dot"></span>
+            <h2 class="section-title">&#xBA58;&#xC158; &#xC54C;&#xB9BC;</h2>
+          </div>
+          <div class="mention-feed" data-mention-feed></div>
+        </section>
+
+        <section class="guide-card">
+          <div class="section-title-row">
+            <span class="section-dot"></span>
+            <h2 class="section-title">&#xC0AC;&#xC6A9; &#xAC00;&#xC774;&#xB4DC;</h2>
+          </div>
+          <ul class="guide-list">
+            <li>&#xAC8C;&#xC2DC;&#xD310; &#xD0ED;&#xC744; &#xBA3C;&#xC800; &#xC120;&#xD0DD;&#xD558;&#xACE0; &#xD574;&#xB2F9; &#xD750;&#xB984;&#xC5D0; &#xB9DE;&#xB294; &#xAE00;&#xC744; &#xC62C;&#xB824; &#xC8FC;&#xC138;&#xC694;.</li>
+            <li>@&#xBA58;&#xC158;&#xC740; &#xC0AC;&#xB78C;&#xC744; &#xC815;&#xD655;&#xD788; &#xBD88;&#xB7EC;&#xC57C; &#xD560; &#xB54C; &#xC4F0;&#xBA74; &#xAC00;&#xB3C5;&#xC131;&#xC774; &#xB354; &#xC88B;&#xC2B5;&#xB2C8;&#xB2E4;.</li>
+            <li>&#xC774;&#xBBF8;&#xC9C0;/&#xD30C;&#xC77C; &#xCCA8;&#xBD80;&#xB294; &#xD575;&#xC2EC; &#xC815;&#xBCF4;&#xB97C; &#xC804;&#xB2EC;&#xD560; &#xB54C;&#xB9CC; &#xAC04;&#xB2E8;&#xD558;&#xAC8C; &#xD65C;&#xC6A9;&#xD574; &#xC8FC;&#xC138;&#xC694;.</li>
+          </ul>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div class="settings-overlay" data-settings-overlay hidden>
+    <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="settings-head">
+        <div>
+          <span class="section-chip">&#xD504;&#xB85C;&#xD544; &#xAD00;&#xB9AC;</span>
+          <h2 class="settings-title" id="settings-title">&#xB2C9;&#xB124;&#xC784;, &#xBE44;&#xBC00;&#xBC88;&#xD638;, &#xD504;&#xB85C;&#xD544; &#xC774;&#xBBF8;&#xC9C0; &#xC218;&#xC815;</h2>
+        </div>
+        <button class="ghost-button" type="button" data-close-settings>&#xB2EB;&#xAE30;</button>
+      </div>
+
+      <form class="settings-form" data-settings-form>
+        <div class="settings-avatar-area">
+          <div class="settings-avatar-preview">
+            <img class="avatar-image" data-settings-avatar-image alt="">
+            <span class="avatar-fallback" data-settings-avatar-fallback>G</span>
+          </div>
+
+          <div class="settings-avatar-actions">
+            <label class="secondary-button upload-button">
+              <input type="file" accept="image/*" data-settings-avatar-input hidden>
+              <span>&#xD504;&#xB85C;&#xD544; &#xC774;&#xBBF8;&#xC9C0; &#xC120;&#xD0DD;</span>
+            </label>
+            <button class="ghost-button" type="button" data-settings-avatar-clear>&#xC774;&#xBBF8;&#xC9C0; &#xC81C;&#xAC70;</button>
+            <span class="settings-avatar-name" data-settings-avatar-name>&#xD604;&#xC7AC; &#xC774;&#xBBF8;&#xC9C0; &#xC5C6;&#xC74C;</span>
+          </div>
+        </div>
+
+        <label class="input-group">
+          <span class="input-label">&#xB2C9;&#xB124;&#xC784;</span>
+          <input class="text-input" type="text" name="nickname" maxlength="24" placeholder="&#xC0AC;&#xC6A9;&#xD560; &#xB2C9;&#xB124;&#xC784;&#xC744; &#xC785;&#xB825;&#xD558;&#xC138;&#xC694;">
+        </label>
+
+        <label class="input-group">
+          <span class="input-label">&#xD604;&#xC7AC; &#xBE44;&#xBC00;&#xBC88;&#xD638;</span>
+          <input class="text-input" type="password" name="currentPassword" autocomplete="current-password" placeholder="&#xBE44;&#xBC00;&#xBC88;&#xD638; &#xBCC0;&#xACBD; &#xC2DC; &#xD604;&#xC7AC; &#xBE44;&#xBC00;&#xBC88;&#xD638;&#xB97C; &#xC785;&#xB825;&#xD558;&#xC138;&#xC694;">
+        </label>
+
+        <div class="settings-password-grid">
+          <label class="input-group">
+            <span class="input-label">&#xC0C8; &#xBE44;&#xBC00;&#xBC88;&#xD638;</span>
+            <input class="text-input" type="password" name="nextPassword" autocomplete="new-password" placeholder="&#xC0C8; &#xBE44;&#xBC00;&#xBC88;&#xD638;">
+          </label>
+
+          <label class="input-group">
+            <span class="input-label">&#xC0C8; &#xBE44;&#xBC00;&#xBC88;&#xD638; &#xD655;&#xC778;</span>
+            <input class="text-input" type="password" name="confirmPassword" autocomplete="new-password" placeholder="&#xC0C8; &#xBE44;&#xBC00;&#xBC88;&#xD638; &#xD655;&#xC778;">
+          </label>
+        </div>
+
+        <p class="form-feedback" data-settings-feedback hidden></p>
+
+        <div class="settings-actions">
+          <button class="ghost-button" type="button" data-close-settings>&#xCDE8;&#xC18C;</button>
+          <button class="primary-button" type="submit">&#xBCC0;&#xACBD;&#xC0AC;&#xD56D; &#xC800;&#xC7A5;</button>
+        </div>
+      </form>
     </div>
   </div>
 
-  <div class="page-shell">
-    <div class="warp-layer warp-layer-back"></div>
-    <div class="warp-layer warp-layer-mid"></div>
-    <div class="warp-ring ring-a"></div>
-    <div class="warp-ring ring-b"></div>
-    <div class="noise-grid"></div>
-    <div class="light-burst"></div>
+  <div class="auth-overlay" data-auth-overlay>
+    <div class="auth-shell" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <section class="auth-showcase">
+        <div class="auth-logo" aria-label="GWJ2 OB">
+          <span class="glyph-gwj2">GWJ2</span>
+          <span class="glyph-ob">OB</span>
+        </div>
+        <p class="auth-tagline">Operations Hub · 운영 커맨드 센터</p>
+        <span class="auth-chip">&#xC6B4;&#xC601;&#xC6A9; &#xB85C;&#xADF8;&#xC778;</span>
+        <h2 class="auth-showcase-title" id="auth-title">&#xD604;&#xC7A5;&#xC758; &#xD750;&#xB984;&#xC744; &#xD558;&#xB098;&#xB85C;, GWJ2 OB&#xC5D0;&#xC11C; &#xC774;&#xC5B4;&#xAC00;&#xC138;&#xC694;.</h2>
+        <p class="auth-showcase-description">&#xC778;&#xC218;&#xC778;&#xACC4;, &#xC6B4;&#xC601; &#xC774;&#xC288;, &#xAC1C;&#xC120; &#xC694;&#xCCAD;, SNOP &#xCD94;&#xC774;&#xAE4C;&#xC9C0; &#xD55C;&#xB208;&#xC5D0; &#xD655;&#xC778;&#xD560; &#xC218; &#xC788;&#xB294; &#xC6B4;&#xC601;&#xC6A9; &#xB300;&#xC2DC;&#xBCF4;&#xB4DC;&#xC785;&#xB2C8;&#xB2E4;.</p>
 
-    <main class="hero" aria-label="GWJ2 OB WIKI landing">
-      <p class="hero-kicker">COUPANG FULFILLMENT SERVICES</p>
-      <h1 class="hero-title">
-        <span>GWJ2</span>
-        <span>OB WIKI</span>
-      </h1>
-      <p class="hero-subtitle">Developer Bennett</p>
-    </main>
+        <div class="auth-feature-grid">
+          <article class="auth-feature">
+            <strong class="auth-feature-title">&#xD0ED; &#xAE30;&#xC900; &#xD750;&#xB984;</strong>
+            <p class="auth-feature-copy">&#xC778;&#xC218;&#xC778;&#xACC4;/&#xC6B4;&#xC601;/&#xC9C0;&#xC2DD;/&#xAC1C;&#xC120; &#xC694;&#xCCAD;&#xC744; &#xB530;&#xB85C; &#xC815;&#xB9AC;&#xD574;&#xC11C; &#xBCFC; &#xC218; &#xC788;&#xC2B5;&#xB2C8;&#xB2E4;.</p>
+          </article>
+          <article class="auth-feature">
+            <strong class="auth-feature-title">&#xCCA8;&#xBD80; &#xACF5;&#xC720;</strong>
+            <p class="auth-feature-copy">&#xC774;&#xBBF8;&#xC9C0;&#xC640; &#xD30C;&#xC77C;&#xC744; &#xD568;&#xAED8; &#xC62C;&#xB824; &#xD604;&#xC7A5; &#xC815;&#xBCF4;&#xB97C; &#xB354; &#xBA85;&#xD655;&#xD788; &#xC804;&#xB2EC;&#xD560; &#xC218; &#xC788;&#xC2B5;&#xB2C8;&#xB2E4;.</p>
+          </article>
+          <article class="auth-feature">
+            <strong class="auth-feature-title">&#xD504;&#xB85C;&#xD544; &#xC124;&#xC815;</strong>
+            <p class="auth-feature-copy">&#xB2C9;&#xB124;&#xC784;, &#xBE44;&#xBC00;&#xBC88;&#xD638;, &#xD504;&#xB85C;&#xD544; &#xC774;&#xBBF8;&#xC9C0;&#xAE4C;&#xC9C0; &#xBC14;&#xB85C; &#xC218;&#xC815;&#xD560; &#xC218; &#xC788;&#xC2B5;&#xB2C8;&#xB2E4;.</p>
+          </article>
+        </div>
+      </section>
 
-    <footer class="status-panel" aria-label="Build progress status">
-      <p class="status-text">&#xC81C;&#xC791; &#xC9C4;&#xD589;&#xC911;</p>
-      <div class="progress-meta">
-        <span>ARCHIVE BUILD</span>
-        <span>5%</span>
-      </div>
-      <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="5" aria-label="&#xD604;&#xC7AC; &#xC81C;&#xC791; &#xC9C4;&#xD589;&#xB960;">
-        <div class="progress-fill"></div>
-      </div>
-      <p class="progress-caption">5%</p>
-    </footer>
+      <section class="auth-panel">
+        <div class="auth-mascot" data-auth-mascot aria-hidden="true">
+          <span class="auth-mascot-antenna"></span>
+          <div class="auth-mascot-body">
+            <div class="auth-mascot-face">
+              <span class="auth-mascot-cheek is-left"></span>
+              <span class="auth-mascot-cheek is-right"></span>
+              <div class="auth-mascot-eye">
+                <span class="auth-mascot-pupil" data-auth-mascot-pupil="left"></span>
+              </div>
+              <div class="auth-mascot-eye">
+                <span class="auth-mascot-pupil" data-auth-mascot-pupil="right"></span>
+              </div>
+              <span class="auth-mascot-mouth"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="auth-tabs" role="tablist" aria-label="auth tabs">
+          <button class="auth-tab is-active" type="button" data-auth-tab="login" aria-selected="true">&#xB85C;&#xADF8;&#xC778;</button>
+          <button class="auth-tab" type="button" data-auth-tab="signup" aria-selected="false">&#xD68C;&#xC6D0;&#xAC00;&#xC785;</button>
+        </div>
+
+        <form class="auth-form is-active" data-auth-form="login" novalidate>
+          <label class="input-group">
+            <span class="input-label">&#xC544;&#xC774;&#xB514;</span>
+            <input class="text-input auth-input" type="text" name="id" autocomplete="username" placeholder="&#xC544;&#xC774;&#xB514;&#xB97C; &#xC785;&#xB825;&#xD558;&#xC138;&#xC694;">
+          </label>
+
+          <label class="input-group">
+            <span class="input-label">&#xBE44;&#xBC00;&#xBC88;&#xD638;</span>
+            <input class="text-input auth-input" type="password" name="password" autocomplete="current-password" placeholder="&#xBE44;&#xBC00;&#xBC88;&#xD638;&#xB97C; &#xC785;&#xB825;&#xD558;&#xC138;&#xC694;">
+          </label>
+
+          <p class="form-feedback auth-feedback" data-auth-feedback="login" hidden></p>
+          <button class="primary-button auth-submit" type="submit">&#xB85C;&#xADF8;&#xC778;</button>
+        </form>
+
+        <form class="auth-form" data-auth-form="signup" novalidate hidden>
+          <label class="input-group">
+            <span class="input-label">&#xC544;&#xC774;&#xB514;</span>
+            <input class="text-input auth-input" type="text" name="id" autocomplete="username" placeholder="&#xAC00;&#xC785;&#xD560; &#xC544;&#xC774;&#xB514;&#xB97C; &#xC785;&#xB825;&#xD558;&#xC138;&#xC694;">
+          </label>
+
+          <label class="input-group">
+            <span class="input-label">&#xBE44;&#xBC00;&#xBC88;&#xD638;</span>
+            <input class="text-input auth-input" type="password" name="password" autocomplete="new-password" placeholder="&#xBE44;&#xBC00;&#xBC88;&#xD638;&#xB97C; &#xC0C8;&#xB85C; &#xC785;&#xB825;&#xD558;&#xC138;&#xC694;">
+          </label>
+
+          <label class="input-group">
+            <span class="input-label">&#xB2C9;&#xB124;&#xC784;</span>
+            <input class="text-input auth-input" type="text" name="nickname" autocomplete="nickname" placeholder="&#xC0AC;&#xC6A9;&#xD560; &#xB2C9;&#xB124;&#xC784;&#xC744; &#xC785;&#xB825;&#xD558;&#xC138;&#xC694;">
+          </label>
+
+          <label class="input-group">
+            <span class="input-label">&#xC9C1;&#xC704;</span>
+            <select class="text-input auth-input" name="position">
+              <option value="">&#xC9C1;&#xC704;&#xB97C; &#xC120;&#xD0DD;&#xD558;&#xC138;&#xC694;</option>
+              <option value="T/C">T/C</option>
+              <option value="Manager">Manager</option>
+            </select>
+          </label>
+
+          <p class="form-feedback auth-feedback" data-auth-feedback="signup" hidden></p>
+          <button class="primary-button auth-submit" type="submit">&#xD68C;&#xC6D0;&#xAC00;&#xC785;</button>
+        </form>
+      </section>
+    </div>
   </div>
+
+  <div class="confirm-overlay" data-confirm-overlay hidden>
+    <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <div class="confirm-head">
+        <div>
+          <span class="section-chip confirm-chip" data-confirm-chip>확인</span>
+          <h2 class="confirm-title" id="confirm-title" data-confirm-title>작업을 진행할까요?</h2>
+        </div>
+        <button class="ghost-button" type="button" data-confirm-close>닫기</button>
+      </div>
+      <p class="confirm-body" data-confirm-body></p>
+      <div class="confirm-actions">
+        <button class="ghost-button" type="button" data-confirm-cancel>취소</button>
+        <button class="primary-button" type="button" data-confirm-accept>확인</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notification-rail" data-notification-rail aria-live="polite" aria-atomic="false"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      doc,
+      getDocs,
+      setDoc,
+      deleteDoc,
+      onSnapshot,
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBV2qw-hdDNB-L0zmj9qgRmHpwDefpayjc",
+      authDomain: "gwj2obwiki.firebaseapp.com",
+      projectId: "gwj2obwiki",
+      storageBucket: "gwj2obwiki.firebasestorage.app",
+      messagingSenderId: "624921077918",
+      appId: "1:624921077918:web:83f0b054bd2123d288f38f",
+    };
+
+    const STORAGE_TO_COLLECTION = {
+      "gwj2-ob-community-posts": "posts",
+      "gwj2-ob-community-snop": "snop",
+      "gwj2-ob-community-notifications": "notifications",
+      "gwj2-ob-community-users": "users",
+    };
+    const DOC_ID_FIELDS = {
+      "gwj2-ob-community-posts": "id",
+      "gwj2-ob-community-snop": "date",
+      "gwj2-ob-community-notifications": "id",
+      "gwj2-ob-community-users": "id",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const cache = {};
+    const subscribers = new Set();
+    const knownIds = {};
+    let bootstrapped = false;
+
+    const pickId = (storageKey, item) => {
+      const field = DOC_ID_FIELDS[storageKey];
+      const raw = item?.[field];
+      return raw == null ? "" : `${raw}`.trim();
+    };
+
+    const sanitizeDocId = (id) => `${id}`.replace(/[\/\.\#\$\[\]]/g, "_") || `_${Date.now()}`;
+
+    const loadCollection = async (storageKey) => {
+      const colName = STORAGE_TO_COLLECTION[storageKey];
+      const snap = await getDocs(collection(db, colName));
+      const items = [];
+      const idSet = new Set();
+      snap.forEach((d) => {
+        items.push(d.data());
+        idSet.add(d.id);
+      });
+      cache[storageKey] = items;
+      knownIds[storageKey] = idSet;
+    };
+
+    const ready = (async () => {
+      const keys = Object.keys(STORAGE_TO_COLLECTION);
+      await Promise.all(keys.map(loadCollection));
+      bootstrapped = true;
+      keys.forEach((storageKey) => {
+        const colName = STORAGE_TO_COLLECTION[storageKey];
+        onSnapshot(collection(db, colName), (snap) => {
+          const items = [];
+          const idSet = new Set();
+          snap.forEach((d) => {
+            items.push(d.data());
+            idSet.add(d.id);
+          });
+          cache[storageKey] = items;
+          knownIds[storageKey] = idSet;
+          if (bootstrapped) {
+            subscribers.forEach((fn) => {
+              try { fn(storageKey); } catch (_) {}
+            });
+          }
+        });
+      });
+    })();
+
+    const write = async (storageKey, nextArray) => {
+      if (!STORAGE_TO_COLLECTION[storageKey]) return;
+      const colName = STORAGE_TO_COLLECTION[storageKey];
+      const arr = Array.isArray(nextArray) ? nextArray : [];
+      const nextIds = new Set();
+      const tasks = [];
+      arr.forEach((item) => {
+        const rawId = pickId(storageKey, item);
+        if (!rawId) return;
+        const docId = sanitizeDocId(rawId);
+        nextIds.add(docId);
+        tasks.push(setDoc(doc(db, colName, docId), JSON.parse(JSON.stringify(item))));
+      });
+      const prevIds = knownIds[storageKey] || new Set();
+      prevIds.forEach((id) => {
+        if (!nextIds.has(id)) {
+          tasks.push(deleteDoc(doc(db, colName, id)));
+        }
+      });
+      // Update local cache immediately so the next synchronous read sees the write.
+      cache[storageKey] = arr;
+      knownIds[storageKey] = nextIds;
+      try { await Promise.all(tasks); } catch (err) { console.error("Firestore write failed", err); }
+    };
+
+    const read = (storageKey) => cache[storageKey];
+
+    const subscribe = (fn) => {
+      subscribers.add(fn);
+      return () => subscribers.delete(fn);
+    };
+
+    window.__gwj2Firebase = { ready, read, write, subscribe, keys: Object.keys(STORAGE_TO_COLLECTION) };
+  </script>
 
   <script src="script.js"></script>
 </body>
