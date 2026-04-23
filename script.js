@@ -376,6 +376,55 @@ const SYNCED_STORAGE_KEYS = new Set([
 
 const firebaseBridge = () => (typeof window !== "undefined" ? window.__gwj2Firebase : null);
 
+// The Firebase init lives in an inline <script type="module"> which is *deferred*
+// by the browser (runs after DOMContentLoaded). This classic script, by contrast,
+// may execute earlier, so the bridge is not guaranteed to be present at parse
+// time. This helper blocks until the bridge shows up (or a timeout elapses so we
+// never hang forever on a broken CDN / offline load).
+const waitForFirebaseBridge = (timeoutMs = 6000) =>
+  new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve(null);
+    if (window.__gwj2Firebase) return resolve(window.__gwj2Firebase);
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("gwj2-firebase-ready", onReady);
+      resolve(value);
+    };
+    const onReady = () => done(window.__gwj2Firebase || null);
+    window.addEventListener("gwj2-firebase-ready", onReady, { once: true });
+    const interval = window.setInterval(() => {
+      if (window.__gwj2Firebase) {
+        window.clearInterval(interval);
+        done(window.__gwj2Firebase);
+      }
+    }, 40);
+    window.setTimeout(() => {
+      window.clearInterval(interval);
+      done(window.__gwj2Firebase || null);
+    }, timeoutMs);
+  });
+
+const SERVER_STATUS_COPY = {
+  connecting: { state: "연결 확인 중…", detail: "Firebase Firestore 부트스트랩" },
+  connected:  { state: "실시간 연결됨",  detail: "변경사항이 즉시 동기화됩니다" },
+  error:      { state: "연결 끊김",      detail: "로컬 캐시로 동작 중" },
+  offline:    { state: "오프라인",      detail: "네트워크 연결을 확인해 주세요" },
+};
+
+const renderServerStatus = (status, detail) => {
+  const card = document.querySelector("[data-server-status]");
+  if (!card) return;
+  const stateEl = card.querySelector("[data-server-status-state]");
+  const detailEl = card.querySelector("[data-server-status-detail]");
+  const key = SERVER_STATUS_COPY[status] ? status : "connecting";
+  const copy = SERVER_STATUS_COPY[key];
+  card.dataset.state = key;
+  if (stateEl) stateEl.textContent = copy.state;
+  if (detailEl) detailEl.textContent = detail && status === "error" ? `오류: ${detail}` : copy.detail;
+};
+
 const readStorage = (key, fallback) => {
   if (SYNCED_STORAGE_KEYS.has(key)) {
     const bridge = firebaseBridge();
@@ -749,9 +798,14 @@ const usersAll = () => {
   return Array.isArray(users) ? users.map(normalizeUser).filter((user) => user.id) : [];
 };
 
+// When Firebase is wired up, an empty collection means the user intentionally
+// deleted everything — we must NOT re-seed (that would resurrect the documents
+// the user just purged in the Firebase console). We only seed in the pure-local
+// fallback mode so first-time offline demos still have sample content.
 const postsAll = () => {
   const stored = readStorage(STORAGE_KEYS.posts, null);
   if (!Array.isArray(stored)) {
+    if (firebaseBridge()) return [];
     const seeded = buildSeedPosts();
     writeStorage(STORAGE_KEYS.posts, seeded);
     return seeded;
@@ -762,6 +816,7 @@ const postsAll = () => {
 const snopAll = () => {
   const stored = readStorage(STORAGE_KEYS.snop, null);
   if (!Array.isArray(stored)) {
+    if (firebaseBridge()) return [];
     const seeded = buildSeedSnopEntries();
     writeStorage(STORAGE_KEYS.snop, seeded);
     return seeded;
@@ -1984,6 +2039,8 @@ const refreshAll = () => {
   renderMentionFeed(allPosts);
   renderPosts(visiblePosts);
   renderNotificationRail();
+  refreshSideMentionBadge();
+  mirrorSnopCompact();
   scheduleRevealSweep();
 };
 
@@ -2873,12 +2930,157 @@ const handleGlobalKeydown = (event) => {
   }
 };
 
+// ---- Side panel tab switcher (calendar / mention / guide share one card) ----
+const setSidePanel = (key) => {
+  const tabs = document.querySelectorAll("[data-side-tab]");
+  const panels = document.querySelectorAll("[data-side-panel]");
+  if (!tabs.length || !panels.length) return;
+  tabs.forEach((btn) => {
+    const active = btn.dataset.sideTab === key;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-selected", String(active));
+  });
+  panels.forEach((panel) => {
+    panel.hidden = panel.dataset.sidePanel !== key;
+  });
+};
+
+const initSidePanelTabs = () => {
+  const root = document.querySelector("[data-side-panel-root]");
+  if (!root) return;
+  root.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-side-tab]");
+    if (!btn) return;
+    setSidePanel(btn.dataset.sideTab);
+  });
+};
+
+// Update the mention tab badge count (remote unread mentions targeting the current user)
+const refreshSideMentionBadge = () => {
+  const badge = document.querySelector("[data-side-mention-count]");
+  if (!badge) return;
+  const me = state.user?.id;
+  if (!me) {
+    badge.hidden = true;
+    badge.textContent = "0";
+    return;
+  }
+  // Count posts/comments that mention me and are newer than my session start
+  // (best-effort — falls back to zero if data isn't ready).
+  let count = 0;
+  try {
+    const posts = Array.isArray(postsAll()) ? postsAll() : [];
+    posts.forEach((post) => {
+      const mentioned = typeof post.content === "string" && post.content.includes(`@${state.user.nickname}`);
+      if (mentioned && post.authorId !== me) count += 1;
+    });
+  } catch (_) {}
+  if (count > 0) {
+    badge.hidden = false;
+    badge.textContent = count > 99 ? "99+" : String(count);
+  } else {
+    badge.hidden = true;
+  }
+};
+
+// ---- SNOP panel collapse/expand ----
+const initSnopCollapse = () => {
+  const panel = document.querySelector("[data-snop-panel]");
+  const toggle = document.querySelector("[data-snop-toggle]");
+  if (!panel || !toggle) return;
+  toggle.addEventListener("click", () => {
+    const collapsed = panel.classList.toggle("is-collapsed");
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+  });
+};
+
+// Build an inline SVG sparkline from the last 7 SNOP entries.
+// Returns an HTML string (or empty string when there's nothing to draw).
+const buildSnopSparkline = () => {
+  let entries = [];
+  try { entries = snopAll(); } catch (_) { entries = []; }
+  if (!Array.isArray(entries) || entries.length < 2) return "";
+
+  const values = entries.slice(-7).map((e) => Number(e.value)).filter(Number.isFinite);
+  if (values.length < 2) return "";
+
+  const w = 120;
+  const h = 36;
+  const pad = 3;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const stepX = (w - pad * 2) / (values.length - 1);
+
+  const points = values.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = pad + (h - pad * 2) * (1 - (v - min) / range);
+    return [x, y];
+  });
+
+  const linePath = points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const areaPath = `${linePath} L${points.at(-1)[0].toFixed(1)} ${h} L${points[0][0].toFixed(1)} ${h} Z`;
+  const [lastX, lastY] = points.at(-1);
+
+  return `
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="spark-gradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="#e04850" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="#e04850" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path class="spark-area" d="${areaPath}"/>
+      <path class="spark-line" d="${linePath}"/>
+      <circle class="spark-dot-last" cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="3.2"/>
+    </svg>
+  `;
+};
+
+// Mirror the canonical SNOP stats (inside the expanded body) up to the
+// always-visible compact header, so the header always reflects current data.
+const mirrorSnopCompact = () => {
+  const todaySrc = document.querySelector("[data-snop-today-value]");
+  const deltaSrc = document.querySelector("[data-snop-delta-value]");
+  const captionSrc = document.querySelector("[data-snop-caption]");
+  const todayDst = document.querySelector("[data-snop-compact-today]");
+  const deltaDst = document.querySelector("[data-snop-compact-delta]");
+  const captionDst = document.querySelector("[data-snop-compact-caption]");
+  const sparkDst = document.querySelector("[data-snop-compact-spark]");
+
+  if (todayDst && todaySrc) todayDst.textContent = todaySrc.textContent || "-";
+  if (deltaDst && deltaSrc) {
+    const raw = (deltaSrc.textContent || "").trim();
+    deltaDst.textContent = raw || "-";
+    deltaDst.classList.toggle("is-up", raw.startsWith("+"));
+    deltaDst.classList.toggle("is-down", raw.startsWith("-") && raw !== "-");
+  }
+  if (captionDst && captionSrc) captionDst.textContent = captionSrc.textContent || "주간 추이";
+  if (sparkDst) {
+    const html = buildSnopSparkline();
+    if (html) {
+      // Only re-inject if the data actually changed — preserves the draw animation
+      const fingerprint = html.length + "|" + (todayDst?.textContent ?? "");
+      if (sparkDst.dataset.fingerprint !== fingerprint) {
+        sparkDst.innerHTML = html;
+        sparkDst.dataset.fingerprint = fingerprint;
+      }
+    } else {
+      sparkDst.innerHTML = "";
+      sparkDst.dataset.fingerprint = "";
+    }
+  }
+};
+
 const bindEvents = () => {
   el.postForm.addEventListener("submit", submitPost);
   if (el.snopForm) el.snopForm.addEventListener("submit", submitSnop);
   el.authForms.login.addEventListener("submit", submitLogin);
   el.authForms.signup.addEventListener("submit", submitSignup);
   el.settingsForm.addEventListener("submit", saveSettings);
+
+  initSidePanelTabs();
+  initSnopCollapse();
 
   document.addEventListener("input", handleGlobalInput);
   document.addEventListener("click", handleGlobalClick);
@@ -3003,25 +3205,35 @@ const renderCalendarGrid = () => {
     cells.push({ date: next, outside: true });
   }
 
+  const MAX_BADGES = 2;
   grid.innerHTML = cells
     .map(({ date, outside }) => {
       const key = dateKeyFromDate(date);
-      const dayEvents = eventsForDate(key).slice(0, 3);
-      const dots = dayEvents
+      const dayEventsAll = eventsForDate(key);
+      const dayEvents = dayEventsAll.slice(0, MAX_BADGES);
+      const overflow = Math.max(0, dayEventsAll.length - dayEvents.length);
+      const badges = dayEvents
         .map((e) => {
           const cat = getCategoryById(e.category);
-          return `<span class="calendar-event-dot" style="--cat-color:${cat.color}"></span>`;
+          const title = escapeHtml(e.title || cat.label || "이벤트");
+          const titleAttr = escapeHtml(`${e.title || ""}${e.note ? ` · ${e.note}` : ""}`.trim() || cat.label);
+          return `<span class="calendar-day-badge" style="--cat-color:${cat.color}" title="${titleAttr}"><span class="calendar-day-badge-dot"></span><span class="calendar-day-badge-text">${title}</span></span>`;
         })
         .join("");
+      const overflowBadge = overflow > 0
+        ? `<span class="calendar-day-badge is-overflow" title="+${overflow} 더보기">+${overflow}</span>`
+        : "";
+      const hasEvents = dayEventsAll.length > 0;
       const classes = [
         "calendar-day",
         outside ? "is-outside" : "",
         key === todayKey ? "is-today" : "",
         key === calendarState.selectedDate ? "is-selected" : "",
+        hasEvents ? "has-events" : "",
       ]
         .filter(Boolean)
         .join(" ");
-      return `<button type="button" class="${classes}" data-calendar-day="${key}"><span class="calendar-day-num">${date.getDate()}</span><span class="calendar-day-dots">${dots}</span></button>`;
+      return `<button type="button" class="${classes}" data-calendar-day="${key}"><span class="calendar-day-num">${date.getDate()}</span><span class="calendar-day-badges">${badges}${overflowBadge}</span></button>`;
     })
     .join("");
 };
@@ -3419,21 +3631,33 @@ const markStaleNotificationsRead = () => {
   if (changed) saveNotifications(next);
 };
 
+// Read the persisted session directly from localStorage without touching any
+// of the synced collections — used to unlock the UI optimistically before
+// Firebase has even booted, so returning users never see the auth modal flash.
+const readCachedSessionSync = () => {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.session);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return normalizeSession(parsed);
+  } catch (_) {
+    return null;
+  }
+};
+
 const initialize = async () => {
   applyTheme(readThemePreference());
-  const bridge = firebaseBridge();
-  if (bridge?.ready) {
-    try {
-      await bridge.ready;
-    } catch (err) {
-      console.error("Firebase bootstrap failed, falling back to local cache", err);
-    }
-    bridge.subscribe?.(() => {
-      // A remote Firestore change arrived — repaint the UI against the refreshed cache.
-      try { refreshAll(); } catch (_) {}
-    });
+  renderServerStatus("connecting");
+
+  // Optimistic session restore — if the browser has a stored session we trust
+  // it enough to hide the auth overlay immediately. Firebase verification below
+  // will re-lock only if the user turns out to no longer exist server-side.
+  const optimisticSession = readCachedSessionSync();
+  if (optimisticSession?.id) {
+    state.user = optimisticSession;
+    syncLockState(false);
   }
-  markStaleNotificationsRead();
+
   bindEvents();
   initCalendar();
   initAuthMascot();
@@ -3442,11 +3666,37 @@ const initialize = async () => {
   state.snop.selectedDate = recentSevenDateKeys().at(-1) || dateKeyFromDate(new Date());
   renderComposeAttachments();
   renderComposePreview();
+
+  // Now wait for Firebase (module script is deferred so may still be loading).
+  const bridge = await waitForFirebaseBridge();
+  if (bridge) {
+    bridge.onStatusChange?.((status, detail) => renderServerStatus(status, detail));
+    try {
+      await bridge.ready;
+    } catch (err) {
+      console.error("Firebase bootstrap failed, falling back to local cache", err);
+      renderServerStatus("error", err?.message || "bootstrap failed");
+    }
+    bridge.subscribe?.(() => {
+      try { refreshAll(); } catch (_) {}
+    });
+  } else {
+    renderServerStatus("error", "Firebase SDK load timeout");
+  }
+
+  markStaleNotificationsRead();
+
   const session = await authService.getSession();
   if (session) {
     state.user = session;
     syncLockState(false);
+  } else if (optimisticSession?.id && !bridge) {
+    // Bridge never showed up; we have no way to validate the user against the
+    // server. Keep the optimistic session rather than booting them out.
+    state.user = optimisticSession;
+    syncLockState(false);
   } else {
+    state.user = null;
     syncLockState(true);
   }
   refreshAll();

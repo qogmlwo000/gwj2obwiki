@@ -122,31 +122,36 @@
 
     <main class="workspace">
       <section class="content-column">
-        <section class="hero-card">
-          <div class="hero-main">
-            <div class="hero-copy">
-              <span class="hero-badge" data-hero-badge></span>
-              <h2 class="hero-title" data-hero-title></h2>
-              <p class="hero-description" data-hero-description></p>
-            </div>
+        <section class="snop-panel is-collapsed" aria-labelledby="snop-panel-title" data-snop-panel>
+          <button class="snop-compact-head" type="button" data-snop-toggle aria-expanded="false" aria-controls="snop-body">
+            <span class="snop-compact-glow" aria-hidden="true"></span>
+            <span class="snop-compact-shimmer" aria-hidden="true"></span>
 
-            <div class="hero-metrics">
-              <article class="hero-metric">
-                <span class="hero-metric-label">&#xD604;&#xC7AC; &#xD53C;&#xB4DC;</span>
-                <strong class="hero-metric-value" data-hero-posts>0</strong>
-              </article>
-              <article class="hero-metric">
-                <span class="hero-metric-label">&#xBA58;&#xC158; &#xC54C;&#xB9BC;</span>
-                <strong class="hero-metric-value" data-hero-mentions>0</strong>
-              </article>
-              <article class="hero-metric">
-                <span class="hero-metric-label">&#xC88B;&#xC544;&#xC694; &#xBC18;&#xC751;</span>
-                <strong class="hero-metric-value" data-hero-likes>0</strong>
-              </article>
-            </div>
-          </div>
+            <span class="snop-compact-left">
+              <span class="snop-compact-live" aria-hidden="true">
+                <span class="snop-compact-live-dot"></span>
+                <span class="snop-compact-live-text">LIVE</span>
+              </span>
+              <span class="snop-compact-label">오늘 SNOP</span>
+              <strong class="snop-compact-value" data-snop-compact-today>-</strong>
+              <span class="snop-compact-delta" data-snop-compact-delta>-</span>
+            </span>
 
-          <section class="snop-panel" aria-labelledby="snop-panel-title">
+            <span class="snop-compact-right">
+              <span class="snop-compact-spark" data-snop-compact-spark aria-hidden="true"></span>
+              <span class="snop-compact-caption" data-snop-compact-caption>주간 추이</span>
+              <span class="snop-compact-chevron" aria-hidden="true">▾</span>
+            </span>
+          </button>
+
+          <div class="snop-body" id="snop-body" data-snop-body>
+          <!-- hidden placeholders for JS compatibility -->
+          <span hidden data-hero-badge></span>
+          <h2 hidden data-hero-title></h2>
+          <p hidden data-hero-description></p>
+          <span hidden data-hero-posts>0</span>
+          <span hidden data-hero-mentions>0</span>
+          <span hidden data-hero-likes>0</span>
             <div class="snop-panel-head">
               <div class="snop-panel-copy">
                 <span class="section-chip snop-panel-chip">Weekly SNOP</span>
@@ -205,7 +210,7 @@
               </div>
               <div class="snop-chart-surface" data-snop-chart></div>
             </div>
-          </section>
+          </div>
         </section>
 
         <section class="composer-card">
@@ -291,7 +296,7 @@
               </div>
             </form>
 
-            <article class="preview-card">
+            <article class="preview-card is-hidden">
               <div class="preview-head">
                 <span class="preview-badge">&#xBBF8;&#xB9AC;&#xBCF4;&#xAE30;</span>
                 <h3 class="preview-title">&#xC2E4;&#xC2DC;&#xAC04; &#xBBF8;&#xB9AC;&#xBCF4;&#xAE30;</h3>
@@ -332,6 +337,15 @@
       </section>
 
       <aside class="side-column">
+        <section class="server-status-card" data-server-status aria-live="polite">
+          <span class="server-status-dot" aria-hidden="true"></span>
+          <div class="server-status-copy">
+            <span class="server-status-label">서버 연결</span>
+            <strong class="server-status-state" data-server-status-state>연결 확인 중…</strong>
+            <span class="server-status-detail" data-server-status-detail>Firebase Firestore</span>
+          </div>
+        </section>
+
         <section class="profile-card">
           <div class="section-title-row">
             <span class="section-dot"></span>
@@ -356,12 +370,17 @@
           </div>
         </section>
 
-        <section class="calendar-card" aria-labelledby="calendar-title">
-          <div class="section-title-row">
-            <span class="section-dot"></span>
-            <h2 class="section-title" id="calendar-title">운영 캘린더</h2>
+        <section class="side-panel-card" data-side-panel-root>
+          <div class="side-panel-tabs" role="tablist" aria-label="우측 패널 탭">
+            <button class="side-panel-tab is-active" type="button" role="tab" aria-selected="true" data-side-tab="calendar">캘린더</button>
+            <button class="side-panel-tab" type="button" role="tab" aria-selected="false" data-side-tab="mention">
+              <span>멘션</span>
+              <span class="side-panel-badge" data-side-mention-count hidden>0</span>
+            </button>
+            <button class="side-panel-tab" type="button" role="tab" aria-selected="false" data-side-tab="guide">가이드</button>
           </div>
 
+        <section class="calendar-card" aria-labelledby="calendar-title" data-side-panel="calendar">
           <div class="calendar-head">
             <div class="calendar-nav">
               <button class="calendar-nav-btn" type="button" data-calendar-prev aria-label="이전 달">‹</button>
@@ -420,24 +439,19 @@
           </div>
         </div>
 
-        <section class="mention-card">
-          <div class="section-title-row">
-            <span class="section-dot"></span>
-            <h2 class="section-title">&#xBA58;&#xC158; &#xC54C;&#xB9BC;</h2>
-          </div>
+        <section class="mention-card" data-side-panel="mention" hidden>
           <div class="mention-feed" data-mention-feed></div>
         </section>
 
-        <section class="guide-card">
-          <div class="section-title-row">
-            <span class="section-dot"></span>
-            <h2 class="section-title">&#xC0AC;&#xC6A9; &#xAC00;&#xC774;&#xB4DC;</h2>
-          </div>
+        <section class="guide-card" data-side-panel="guide" hidden>
           <ul class="guide-list">
-            <li>&#xAC8C;&#xC2DC;&#xD310; &#xD0ED;&#xC744; &#xBA3C;&#xC800; &#xC120;&#xD0DD;&#xD558;&#xACE0; &#xD574;&#xB2F9; &#xD750;&#xB984;&#xC5D0; &#xB9DE;&#xB294; &#xAE00;&#xC744; &#xC62C;&#xB824; &#xC8FC;&#xC138;&#xC694;.</li>
-            <li>@&#xBA58;&#xC158;&#xC740; &#xC0AC;&#xB78C;&#xC744; &#xC815;&#xD655;&#xD788; &#xBD88;&#xB7EC;&#xC57C; &#xD560; &#xB54C; &#xC4F0;&#xBA74; &#xAC00;&#xB3C5;&#xC131;&#xC774; &#xB354; &#xC88B;&#xC2B5;&#xB2C8;&#xB2E4;.</li>
-            <li>&#xC774;&#xBBF8;&#xC9C0;/&#xD30C;&#xC77C; &#xCCA8;&#xBD80;&#xB294; &#xD575;&#xC2EC; &#xC815;&#xBCF4;&#xB97C; &#xC804;&#xB2EC;&#xD560; &#xB54C;&#xB9CC; &#xAC04;&#xB2E8;&#xD558;&#xAC8C; &#xD65C;&#xC6A9;&#xD574; &#xC8FC;&#xC138;&#xC694;.</li>
+            <li>게시판 탭을 먼저 선택하고 해당 흐름에 맞는 글을 올려 주세요.</li>
+            <li>@멘션은 사람을 정확히 불러야 할 때 쓰면 가독성이 더 좋습니다.</li>
+            <li>이미지/파일 첨부는 핵심 정보를 전달할 때만 간단하게 활용해 주세요.</li>
+            <li>SNOP 패널 상단을 클릭해 주간 추이를 접거나 펼칠 수 있습니다.</li>
+            <li>서버 연결 상태는 왼쪽 상단에서 실시간으로 확인할 수 있습니다.</li>
           </ul>
+        </section>
         </section>
       </aside>
     </main>
@@ -658,8 +672,19 @@
 
     const cache = {};
     const subscribers = new Set();
+    const statusSubscribers = new Set();
     const knownIds = {};
     let bootstrapped = false;
+
+    // "connecting" | "connected" | "error"
+    let status = "connecting";
+    let statusDetail = "";
+    const setStatus = (next, detail = "") => {
+      if (status === next && statusDetail === detail) return;
+      status = next;
+      statusDetail = detail;
+      statusSubscribers.forEach((fn) => { try { fn(status, detail); } catch (_) {} });
+    };
 
     const pickId = (storageKey, item) => {
       const field = DOC_ID_FIELDS[storageKey];
@@ -684,25 +709,40 @@
 
     const ready = (async () => {
       const keys = Object.keys(STORAGE_TO_COLLECTION);
-      await Promise.all(keys.map(loadCollection));
+      try {
+        await Promise.all(keys.map(loadCollection));
+      } catch (err) {
+        console.error("Firestore bootstrap failed", err);
+        setStatus("error", err?.message || "bootstrap failed");
+        throw err;
+      }
       bootstrapped = true;
+      setStatus("connected");
       keys.forEach((storageKey) => {
         const colName = STORAGE_TO_COLLECTION[storageKey];
-        onSnapshot(collection(db, colName), (snap) => {
-          const items = [];
-          const idSet = new Set();
-          snap.forEach((d) => {
-            items.push(d.data());
-            idSet.add(d.id);
-          });
-          cache[storageKey] = items;
-          knownIds[storageKey] = idSet;
-          if (bootstrapped) {
-            subscribers.forEach((fn) => {
-              try { fn(storageKey); } catch (_) {}
+        onSnapshot(
+          collection(db, colName),
+          (snap) => {
+            const items = [];
+            const idSet = new Set();
+            snap.forEach((d) => {
+              items.push(d.data());
+              idSet.add(d.id);
             });
-          }
-        });
+            cache[storageKey] = items;
+            knownIds[storageKey] = idSet;
+            setStatus("connected");
+            if (bootstrapped) {
+              subscribers.forEach((fn) => {
+                try { fn(storageKey); } catch (_) {}
+              });
+            }
+          },
+          (err) => {
+            console.error("Firestore snapshot error", storageKey, err);
+            setStatus("error", err?.message || "snapshot error");
+          },
+        );
       });
     })();
 
@@ -728,7 +768,13 @@
       // Update local cache immediately so the next synchronous read sees the write.
       cache[storageKey] = arr;
       knownIds[storageKey] = nextIds;
-      try { await Promise.all(tasks); } catch (err) { console.error("Firestore write failed", err); }
+      try {
+        await Promise.all(tasks);
+        setStatus("connected");
+      } catch (err) {
+        console.error("Firestore write failed", err);
+        setStatus("error", err?.message || "write failed");
+      }
     };
 
     const read = (storageKey) => cache[storageKey];
@@ -738,7 +784,30 @@
       return () => subscribers.delete(fn);
     };
 
-    window.__gwj2Firebase = { ready, read, write, subscribe, keys: Object.keys(STORAGE_TO_COLLECTION) };
+    const onStatusChange = (fn) => {
+      statusSubscribers.add(fn);
+      try { fn(status, statusDetail); } catch (_) {}
+      return () => statusSubscribers.delete(fn);
+    };
+
+    // Expose online/offline signals too
+    if (typeof window !== "undefined") {
+      window.addEventListener("online",  () => setStatus(bootstrapped ? "connected" : "connecting"));
+      window.addEventListener("offline", () => setStatus("error", "offline"));
+      if (!navigator.onLine) setStatus("error", "offline");
+    }
+
+    window.__gwj2Firebase = {
+      ready,
+      read,
+      write,
+      subscribe,
+      onStatusChange,
+      getStatus: () => ({ status, detail: statusDetail }),
+      keys: Object.keys(STORAGE_TO_COLLECTION),
+    };
+    // Fire a DOM event so the classic script can hook in even if it already loaded.
+    try { window.dispatchEvent(new Event("gwj2-firebase-ready")); } catch (_) {}
   </script>
 
   <script src="script.js"></script>
