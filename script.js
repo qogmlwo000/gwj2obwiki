@@ -7,6 +7,9 @@ const STORAGE_KEYS = {
   notifications: "gwj2-ob-community-notifications",
   calendar: "gwj2-ob-community-calendar",
   calendarFilter: "gwj2-ob-community-calendar-filter",
+  composeDraft: "gwj2-ob-community-compose-draft",
+  bookmarks: "gwj2-ob-community-bookmarks",
+  notificationMute: "gwj2-ob-community-notification-mute",
 };
 
 const MAX_UPLOAD_SIZE = {
@@ -240,6 +243,9 @@ const state = {
   activeHandoverTab: "it-equipment",
   handoverExpanded: true,
   feedFilter: "latest",
+  feedSearch: "",
+  feedVisibleCount: 20, // pagination: initial page size
+  editingPostId: null,
   theme: "dark",
   snop: {
     selectedDate: "",
@@ -262,6 +268,8 @@ const state = {
   notificationSeen: new Set(),
   sessionStartAt: Date.now(),
 };
+
+const FEED_PAGE_SIZE = 20;
 
 const el = {
   appShell: $(".app-shell"),
@@ -365,6 +373,9 @@ const el = {
   confirmCancel: $("[data-confirm-cancel]"),
   confirmClose: $("[data-confirm-close]"),
   notificationRail: $("[data-notification-rail]"),
+  presenceChip: $("[data-presence-chip]"),
+  presenceCount: $("[data-presence-count]"),
+  presenceNames: $("[data-presence-names]"),
 };
 
 const SYNCED_STORAGE_KEYS = new Set([
@@ -372,6 +383,7 @@ const SYNCED_STORAGE_KEYS = new Set([
   STORAGE_KEYS.snop,
   STORAGE_KEYS.notifications,
   STORAGE_KEYS.users,
+  STORAGE_KEYS.calendar,
 ]);
 
 const firebaseBridge = () => (typeof window !== "undefined" ? window.__gwj2Firebase : null);
@@ -866,6 +878,60 @@ const allProfiles = () => {
   });
 };
 
+/* ========================================================
+   Password hashing (SHA-256 + per-user salt, Web Crypto API)
+   - Stored password format is `sha256:<salt_hex>:<hash_hex>` (prefix `sha256:`)
+   - Plain-text legacy passwords are upgraded to hashed form on next login.
+   ======================================================== */
+const PWD_HASH_PREFIX = "sha256:";
+const PWD_SALT_BYTES = 16;
+
+const _bytesToHex = (buf) =>
+  Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+const _hexToBytes = (hex) => {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+};
+
+const hashPassword = async (password, saltHex) => {
+  const salt = saltHex
+    ? _hexToBytes(saltHex)
+    : crypto.getRandomValues(new Uint8Array(PWD_SALT_BYTES));
+  const enc = new TextEncoder();
+  const payload = new Uint8Array(salt.length + enc.encode(password).length);
+  payload.set(salt, 0);
+  payload.set(enc.encode(password), salt.length);
+  const digest = await crypto.subtle.digest("SHA-256", payload);
+  return `${PWD_HASH_PREFIX}${_bytesToHex(salt)}:${_bytesToHex(digest)}`;
+};
+
+const isHashedPassword = (value) => typeof value === "string" && value.startsWith(PWD_HASH_PREFIX);
+
+const verifyPassword = async (plain, stored) => {
+  if (!isHashedPassword(stored)) {
+    // Legacy plain-text comparison (will be upgraded on next successful login)
+    return plain === stored;
+  }
+  const [, saltHex] = stored.split(":"); // prefix:salt:hash
+  const recomputed = await hashPassword(plain, saltHex);
+  // Timing-safe-ish compare
+  if (recomputed.length !== stored.length) return false;
+  let diff = 0;
+  for (let i = 0; i < recomputed.length; i++) diff |= recomputed.charCodeAt(i) ^ stored.charCodeAt(i);
+  return diff === 0;
+};
+
+const upgradeStoredPassword = async (userId, plainPassword) => {
+  try {
+    const hashed = await hashPassword(plainPassword);
+    const next = usersAll().map((u) => (u.id === userId ? { ...u, password: hashed } : u));
+    saveUsers(next);
+  } catch (err) {
+    console.warn("password upgrade failed", err);
+  }
+};
+
 const authService = {
   async getSession() {
     const session = normalizeSession(readStorage(STORAGE_KEYS.session, null));
@@ -882,8 +948,12 @@ const authService = {
   async login({ id, password }) {
     await wait(120);
     const user = findStoredUser(id);
-    if (!user || user.password !== password) {
-      throw new Error("아이디 또는 비밀번호를 확인해 주세요.");
+    if (!user) throw new Error("아이디 또는 비밀번호를 확인해 주세요.");
+    const ok = await verifyPassword(password, user.password);
+    if (!ok) throw new Error("아이디 또는 비밀번호를 확인해 주세요.");
+    // Lazy migration: if password was stored in plain text, upgrade it now.
+    if (!isHashedPassword(user.password)) {
+      upgradeStoredPassword(user.id, password).catch(() => {});
     }
     const session = buildUserSession(user);
     saveSession(session);
@@ -898,7 +968,8 @@ const authService = {
     if (!ALLOWED_POSITIONS.has(position)) {
       throw new Error("직위를 다시 선택해 주세요.");
     }
-    const nextUser = normalizeUser({ id, password, nickname, position, avatarDataUrl: "" });
+    const hashed = await hashPassword(password);
+    const nextUser = normalizeUser({ id, password: hashed, nickname, position, avatarDataUrl: "" });
     saveUsers([...users, nextUser]);
     const session = buildUserSession(nextUser);
     saveSession(session);
@@ -1007,10 +1078,310 @@ const markNotificationRead = (id) => {
   saveNotifications(next);
 };
 
+/* Notification mute settings (per-user, localStorage) */
+const muteStorageKey = () => `${STORAGE_KEYS.notificationMute}:${state.user?.id || "anon"}`;
+const readMutedTones = () => {
+  try {
+    const raw = window.localStorage.getItem(muteStorageKey());
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch (_) { return new Set(); }
+};
+const writeMutedTones = (set) => {
+  try { window.localStorage.setItem(muteStorageKey(), JSON.stringify([...set])); } catch (_) {}
+};
+const toggleMutedTone = (tone, muted) => {
+  const set = readMutedTones();
+  if (muted) set.add(tone); else set.delete(tone);
+  writeMutedTones(set);
+};
+
+/* ------------------------------------------------------------------
+   Online presence + typing indicator
+   - Presence doc (collection "presence", id=userId): { userId, nickname, position, lastSeen }
+     Heartbeat every 25s; client treats lastSeen<=60s as online.
+   - Typing doc (collection "typing", id=`${postId}__${userId}`):
+     { postId, userId, nickname, lastTyped }
+     Rebroadcast while the user keeps typing; cleared when idle (3s) or on submit.
+   Both collections bypass the snapshot-cache bridge via setDocRaw/deleteDocRaw/
+   subscribeRaw to avoid full-rewrite interference.
+------------------------------------------------------------------ */
+const PRESENCE_ONLINE_WINDOW_MS = 60 * 1000;
+const PRESENCE_HEARTBEAT_MS = 25 * 1000;
+const TYPING_IDLE_MS = 3 * 1000;
+const TYPING_FRESH_MS = 6 * 1000;
+
+const presenceRuntime = {
+  online: new Map(),       // userId -> { userId, nickname, position, lastSeen }
+  typing: new Map(),       // postId -> Map(userId -> { nickname, lastTyped })
+  heartbeatTimer: null,
+  unsubscribePresence: null,
+  unsubscribeTyping: null,
+  typingIdleTimers: new Map(), // postId -> timeout id (for own broadcast clear)
+  typingRenderTimer: null,
+  started: false,
+  currentUserId: null,
+};
+
+const isOnlineTimestamp = (ts) => typeof ts === "number" && (Date.now() - ts) <= PRESENCE_ONLINE_WINDOW_MS;
+const isFreshTyping = (ts) => typeof ts === "number" && (Date.now() - ts) <= TYPING_FRESH_MS;
+
+const writePresenceHeartbeat = async () => {
+  const bridge = firebaseBridge();
+  const user = state.user;
+  if (!bridge?.setDocRaw || !user?.id) return;
+  await bridge.setDocRaw("presence", user.id, {
+    userId: user.id,
+    nickname: user.nickname || user.id,
+    position: user.position || "",
+    lastSeen: Date.now(),
+  });
+};
+
+const clearPresenceDoc = async () => {
+  const bridge = firebaseBridge();
+  const uid = presenceRuntime.currentUserId;
+  if (!bridge?.deleteDocRaw || !uid) return;
+  try { await bridge.deleteDocRaw("presence", uid); } catch (_) {}
+};
+
+const renderPresenceChip = () => {
+  if (!el.presenceChip) return;
+  const now = Date.now();
+  const entries = [];
+  presenceRuntime.online.forEach((info) => {
+    if (isOnlineTimestamp(info.lastSeen)) entries.push(info);
+  });
+  if (!entries.length) {
+    el.presenceChip.hidden = true;
+    return;
+  }
+  el.presenceChip.hidden = false;
+  if (el.presenceCount) el.presenceCount.textContent = String(entries.length);
+  if (el.presenceNames) {
+    const names = entries
+      .map((e) => e.nickname || e.userId)
+      .slice(0, 4)
+      .join(", ");
+    const more = entries.length > 4 ? ` +${entries.length - 4}` : "";
+    el.presenceNames.textContent = names + more;
+    el.presenceNames.setAttribute("title", entries.map((e) => e.nickname || e.userId).join(", "));
+  }
+  // Sprinkle is-online dots onto post avatars for authors currently online.
+  try {
+    const onlineIds = new Set(entries.map((e) => e.userId));
+    document.querySelectorAll("[data-post-id]").forEach((card) => {
+      const postId = card.getAttribute("data-post-id");
+      if (!postId) return;
+      // Find author id: match against state posts
+      const post = (postsAll() || []).find((p) => p.id === postId);
+      if (!post) return;
+      const avatar = card.querySelector(".post-avatar");
+      if (!avatar) return;
+      let dot = avatar.querySelector(".presence-dot");
+      const isOn = onlineIds.has(post.authorId);
+      if (isOn) {
+        if (!dot) {
+          dot = document.createElement("span");
+          dot.className = "presence-dot is-online";
+          dot.setAttribute("aria-label", "온라인");
+          avatar.appendChild(dot);
+        }
+      } else if (dot) {
+        dot.remove();
+      }
+    });
+  } catch (_) {}
+};
+
+const renderTypingIndicators = () => {
+  // Remove stale indicators, then render fresh for each post with typing users.
+  try {
+    document.querySelectorAll("[data-typing-indicator]").forEach((node) => node.remove());
+  } catch (_) {}
+  const now = Date.now();
+  presenceRuntime.typing.forEach((users, postId) => {
+    const fresh = [];
+    users.forEach((info, userId) => {
+      if (userId === state.user?.id) return;
+      if (isFreshTyping(info.lastTyped)) fresh.push(info);
+    });
+    if (!fresh.length) return;
+    const card = document.querySelector(`[data-post-id="${postId.replace(/"/g, "\\\"")}"]`);
+    if (!card) return;
+    const form = card.querySelector('[data-comment-form]');
+    if (!form) return;
+    const names = fresh.map((f) => f.nickname || f.userId).join(", ");
+    const label = fresh.length === 1
+      ? `${names} 님이 입력 중`
+      : `${names} 님이 입력 중`;
+    const node = document.createElement("div");
+    node.setAttribute("data-typing-indicator", postId);
+    node.className = "typing-indicator";
+    node.innerHTML = `
+      <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span class="typing-label">${escapeHtml(label)}</span>
+    `;
+    form.insertAdjacentElement("beforebegin", node);
+  });
+};
+
+const schedulePresenceRender = () => {
+  if (presenceRuntime.typingRenderTimer) return;
+  presenceRuntime.typingRenderTimer = window.setTimeout(() => {
+    presenceRuntime.typingRenderTimer = null;
+    renderPresenceChip();
+    renderTypingIndicators();
+  }, 80);
+};
+
+const handlePresenceSnapshot = (items) => {
+  const map = new Map();
+  items.forEach((entry) => {
+    if (!entry || !entry.userId) return;
+    map.set(entry.userId, {
+      userId: entry.userId,
+      nickname: entry.nickname || entry.userId,
+      position: entry.position || "",
+      lastSeen: typeof entry.lastSeen === "number" ? entry.lastSeen : 0,
+    });
+  });
+  presenceRuntime.online = map;
+  schedulePresenceRender();
+};
+
+const handleTypingSnapshot = (items) => {
+  const grouped = new Map();
+  items.forEach((entry) => {
+    if (!entry || !entry.postId || !entry.userId) return;
+    if (!grouped.has(entry.postId)) grouped.set(entry.postId, new Map());
+    grouped.get(entry.postId).set(entry.userId, {
+      userId: entry.userId,
+      nickname: entry.nickname || entry.userId,
+      lastTyped: typeof entry.lastTyped === "number" ? entry.lastTyped : 0,
+    });
+  });
+  presenceRuntime.typing = grouped;
+  schedulePresenceRender();
+};
+
+const startPresence = async () => {
+  const bridge = firebaseBridge();
+  if (!bridge?.setDocRaw || !state.user?.id) return;
+  if (presenceRuntime.started && presenceRuntime.currentUserId === state.user.id) return;
+  if (presenceRuntime.started) await stopPresence();
+
+  presenceRuntime.started = true;
+  presenceRuntime.currentUserId = state.user.id;
+
+  try { await writePresenceHeartbeat(); } catch (_) {}
+  presenceRuntime.heartbeatTimer = window.setInterval(() => {
+    writePresenceHeartbeat().catch(() => {});
+  }, PRESENCE_HEARTBEAT_MS);
+
+  try {
+    presenceRuntime.unsubscribePresence = bridge.subscribeRaw("presence", handlePresenceSnapshot);
+  } catch (_) {}
+  try {
+    presenceRuntime.unsubscribeTyping = bridge.subscribeRaw("typing", handleTypingSnapshot);
+  } catch (_) {}
+
+  // Periodically re-render so stale entries (beyond the online window) drop off
+  // even without a fresh snapshot event.
+  if (!presenceRuntime._sweepTimer) {
+    presenceRuntime._sweepTimer = window.setInterval(schedulePresenceRender, 15 * 1000);
+  }
+};
+
+const stopPresence = async () => {
+  if (!presenceRuntime.started) return;
+  if (presenceRuntime.heartbeatTimer) {
+    window.clearInterval(presenceRuntime.heartbeatTimer);
+    presenceRuntime.heartbeatTimer = null;
+  }
+  if (presenceRuntime._sweepTimer) {
+    window.clearInterval(presenceRuntime._sweepTimer);
+    presenceRuntime._sweepTimer = null;
+  }
+  if (typeof presenceRuntime.unsubscribePresence === "function") {
+    try { presenceRuntime.unsubscribePresence(); } catch (_) {}
+    presenceRuntime.unsubscribePresence = null;
+  }
+  if (typeof presenceRuntime.unsubscribeTyping === "function") {
+    try { presenceRuntime.unsubscribeTyping(); } catch (_) {}
+    presenceRuntime.unsubscribeTyping = null;
+  }
+  // Clear own typing rows
+  const bridge = firebaseBridge();
+  if (bridge?.deleteDocRaw && presenceRuntime.currentUserId) {
+    presenceRuntime.typingIdleTimers.forEach((timer, postId) => {
+      window.clearTimeout(timer);
+      bridge.deleteDocRaw("typing", `${postId}__${presenceRuntime.currentUserId}`).catch(() => {});
+    });
+  }
+  presenceRuntime.typingIdleTimers.clear();
+  await clearPresenceDoc();
+  presenceRuntime.online = new Map();
+  presenceRuntime.typing = new Map();
+  presenceRuntime.started = false;
+  presenceRuntime.currentUserId = null;
+  if (el.presenceChip) el.presenceChip.hidden = true;
+};
+
+const broadcastTyping = (postId) => {
+  const bridge = firebaseBridge();
+  const user = state.user;
+  if (!bridge?.setDocRaw || !user?.id || !postId) return;
+  const docId = `${postId}__${user.id}`;
+  bridge.setDocRaw("typing", docId, {
+    postId,
+    userId: user.id,
+    nickname: user.nickname || user.id,
+    lastTyped: Date.now(),
+  }).catch(() => {});
+  if (presenceRuntime.typingIdleTimers.has(postId)) {
+    window.clearTimeout(presenceRuntime.typingIdleTimers.get(postId));
+  }
+  const timer = window.setTimeout(() => {
+    presenceRuntime.typingIdleTimers.delete(postId);
+    clearTyping(postId);
+  }, TYPING_IDLE_MS);
+  presenceRuntime.typingIdleTimers.set(postId, timer);
+};
+
+const clearTyping = (postId) => {
+  const bridge = firebaseBridge();
+  const user = state.user;
+  if (!bridge?.deleteDocRaw || !user?.id || !postId) return;
+  if (presenceRuntime.typingIdleTimers.has(postId)) {
+    window.clearTimeout(presenceRuntime.typingIdleTimers.get(postId));
+    presenceRuntime.typingIdleTimers.delete(postId);
+  }
+  bridge.deleteDocRaw("typing", `${postId}__${user.id}`).catch(() => {});
+};
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    // Best-effort cleanup — browsers may not await this.
+    try {
+      const bridge = firebaseBridge();
+      const uid = presenceRuntime.currentUserId;
+      if (bridge?.deleteDocRaw && uid) {
+        bridge.deleteDocRaw("presence", uid);
+        presenceRuntime.typingIdleTimers.forEach((_, postId) => {
+          bridge.deleteDocRaw("typing", `${postId}__${uid}`);
+        });
+      }
+    } catch (_) {}
+  });
+}
+
 const pushNotification = ({ title, body = "", tone = "info" }) => {
-  const next = [{ id: createId("notification"), title, body, tone, createdAt: Date.now(), read: false }, ...notificationsAll()].slice(0, 40);
+  // Respect per-user mutes — still persist the notification (for history) but skip the toast render.
+  const muted = readMutedTones().has(tone);
+  const next = [{ id: createId("notification"), title, body, tone, createdAt: Date.now(), read: muted }, ...notificationsAll()].slice(0, 40);
   saveNotifications(next);
-  renderNotificationRail();
+  if (!muted) renderNotificationRail();
 };
 
 const collapseNotificationLater = (id) => {
@@ -1019,6 +1390,14 @@ const collapseNotificationLater = (id) => {
     const node = $(`[data-notification-id="${id}"]`);
     if (node) node.classList.add("is-collapsed");
   }, 4600);
+};
+
+const NOTIFICATION_ICONS = {
+  success: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`,
+  danger: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12" y2="16.5"/></svg>`,
+  warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12" y2="17"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="8"/></svg>`,
+  mention: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></svg>`,
 };
 
 const renderNotificationRail = () => {
@@ -1032,17 +1411,23 @@ const renderNotificationRail = () => {
     .filter((item) => (item.createdAt || 0) >= state.sessionStartAt) // only notifications from this session
     .slice(0, 3);
   el.notificationRail.innerHTML = items
-    .map(
-      (item) => `
-        <article class="notification-card notification-${escapeHtml(item.tone)}" data-notification-id="${escapeHtml(item.id)}">
+    .map((item) => {
+      const tone = ["success", "danger", "warning", "info", "mention"].includes(item.tone) ? item.tone : "info";
+      const icon = NOTIFICATION_ICONS[tone] || NOTIFICATION_ICONS.info;
+      return `
+        <article class="notification-card is-${escapeHtml(tone)}" data-notification-id="${escapeHtml(item.id)}" role="status" aria-live="polite">
+          <span class="notification-icon" aria-hidden="true">${icon}</span>
           <div class="notification-copy">
             <strong class="notification-title">${escapeHtml(item.title)}</strong>
             ${item.body ? `<p class="notification-body">${escapeHtml(item.body)}</p>` : ""}
           </div>
-          <button class="notification-close" type="button" data-notification-close="${escapeHtml(item.id)}">확인</button>
+          <button class="notification-close" type="button" data-notification-close="${escapeHtml(item.id)}" aria-label="닫기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <span class="notification-progress" aria-hidden="true"></span>
         </article>
-      `,
-    )
+      `;
+    })
     .join("");
   items.forEach((item) => {
     state.notificationSeen.add(item.id);
@@ -1182,8 +1567,223 @@ const sortPosts = (posts) => {
 
 const getVisiblePosts = (posts) => {
   const scoped = getBoardScopedPosts(posts);
-  const filtered = state.feedFilter === "mentions" ? scoped.filter(postHasMention) : scoped;
+  let filtered = scoped;
+  if (state.feedFilter === "mentions") filtered = filtered.filter(postHasMention);
+  if (state.feedFilter === "bookmarks") {
+    const ids = new Set(readBookmarks());
+    filtered = filtered.filter((p) => ids.has(p.id));
+  }
+  const query = (state.feedSearch || "").trim().toLowerCase();
+  if (query) {
+    filtered = filtered.filter((post) => {
+      const haystack = [
+        post.title || "",
+        post.content || "",
+        post.authorName || "",
+        ...(post.comments || []).map((c) => c.content || ""),
+      ].join(" \u0001 ").toLowerCase();
+      return haystack.includes(query);
+    });
+  }
   return sortPosts(filtered);
+};
+
+/* ========================================================
+   Bookmarks (per-user, stored in localStorage only — personal)
+   ======================================================== */
+const bookmarksStorageKey = () => `${STORAGE_KEYS.bookmarks}:${state.user?.id || "anon"}`;
+const readBookmarks = () => {
+  try {
+    const raw = window.localStorage.getItem(bookmarksStorageKey());
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch (_) { return []; }
+};
+const writeBookmarks = (list) => {
+  try {
+    window.localStorage.setItem(bookmarksStorageKey(), JSON.stringify(list));
+  } catch (_) {}
+};
+const isBookmarked = (postId) => readBookmarks().includes(postId);
+const toggleBookmark = (postId) => {
+  const current = readBookmarks();
+  const next = current.includes(postId)
+    ? current.filter((id) => id !== postId)
+    : [postId, ...current];
+  writeBookmarks(next);
+  renderPosts(getVisiblePosts(postsAll()));
+};
+
+/* ========================================================
+   Search highlight — wraps matching substrings with a <mark>
+   Works on already-escaped HTML (since <mark> has no user input).
+   ======================================================== */
+const highlightSearchMatches = (escapedHtml) => {
+  const q = (state.feedSearch || "").trim();
+  if (!q || !escapedHtml) return escapedHtml;
+  const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`(${safe})`, "gi");
+  // Match only outside tags — split by tag boundaries and highlight text parts.
+  return escapedHtml.replace(/(<[^>]+>)|([^<]+)/g, (_, tag, text) => {
+    if (tag) return tag;
+    return text.replace(re, '<span class="search-highlight">$1</span>');
+  });
+};
+
+/* ========================================================
+   Post edit (author only)
+   ======================================================== */
+const renderEditForm = (post) => `
+  <form class="post-edit-form" data-edit-form="${escapeHtml(post.id)}" onsubmit="event.preventDefault();">
+    <input type="text" name="title" maxlength="90" value="${escapeHtml(post.title)}" required>
+    <textarea name="content" maxlength="1200" required>${escapeHtml(post.content)}</textarea>
+    <div class="post-edit-actions">
+      <button type="button" data-edit-cancel="${escapeHtml(post.id)}">취소</button>
+      <button type="button" class="is-primary" data-edit-save="${escapeHtml(post.id)}">저장</button>
+    </div>
+  </form>
+`;
+const saveEditedPost = (postId) => {
+  const form = document.querySelector(`[data-edit-form="${CSS.escape(postId)}"]`);
+  if (!form) return;
+  const title = clean(form.elements.title.value);
+  const content = clean(form.elements.content.value);
+  if (!title || !content) {
+    pushNotification({ title: "수정 실패", body: "제목과 내용을 모두 입력해 주세요.", tone: "warning" });
+    return;
+  }
+  const posts = postsAll();
+  const idx = posts.findIndex((p) => p.id === postId);
+  if (idx < 0) return;
+  const post = posts[idx];
+  if (!state.user || state.user.id !== post.authorId) return;
+  posts[idx] = { ...post, title, content, editedAt: Date.now() };
+  savePosts(posts);
+  state.editingPostId = null;
+  refreshAll();
+  pushNotification({ title: "수정 완료", body: title, tone: "success" });
+};
+
+/* ========================================================
+   Copy post link (share)
+   ======================================================== */
+const copyPostLink = async (postId) => {
+  const url = `${window.location.origin}${window.location.pathname}?post=${encodeURIComponent(postId)}`;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url);
+    else {
+      const ta = document.createElement("textarea");
+      ta.value = url; document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); ta.remove();
+    }
+    pushNotification({ title: "링크 복사됨", body: "클립보드에 게시글 링크가 복사되었습니다.", tone: "info" });
+  } catch (_) {
+    pushNotification({ title: "복사 실패", body: "수동으로 복사해 주세요.", tone: "warning" });
+  }
+};
+
+/* ========================================================
+   Anchor scroll — reads ?post=<id> and scrolls that card into view
+   ======================================================== */
+const scrollToLinkedPost = () => {
+  const params = new URLSearchParams(window.location.search);
+  const postId = params.get("post");
+  if (!postId) return;
+  // Delay until the post list has rendered
+  requestAnimationFrame(() => {
+    const card = document.getElementById(`post-${postId}`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.classList.add("is-anchor-flash");
+    setTimeout(() => card.classList.remove("is-anchor-flash"), 2200);
+  });
+};
+
+/* ========================================================
+   Image lightbox
+   ======================================================== */
+const openLightbox = (src, alt) => {
+  if (!src) return;
+  let lb = $("[data-lightbox]");
+  if (!lb) {
+    lb = document.createElement("div");
+    lb.className = "lightbox";
+    lb.setAttribute("data-lightbox", "");
+    lb.setAttribute("role", "dialog");
+    lb.setAttribute("aria-modal", "true");
+    lb.setAttribute("aria-label", "이미지 확대보기");
+    document.body.appendChild(lb);
+  }
+  lb.innerHTML = `
+    <button class="lightbox-close" type="button" data-lightbox-close aria-label="닫기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <a class="lightbox-download" href="${escapeHtml(src)}" download="${escapeHtml(alt || "image")}" aria-label="다운로드" onclick="event.stopPropagation()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </a>
+    <img class="lightbox-image" src="${escapeHtml(src)}" alt="${escapeHtml(alt || "")}">
+  `;
+  lb.hidden = false;
+  document.body.style.overflow = "hidden";
+};
+const closeLightbox = () => {
+  const lb = $("[data-lightbox]");
+  if (lb) lb.hidden = true;
+  document.body.style.overflow = "";
+};
+
+/* ========================================================
+   Calendar ICS export
+   Generates an .ics file from visible events and triggers download.
+   ======================================================== */
+const exportCalendarIcs = () => {
+  const events = calendarState.events.filter((e) =>
+    calendarState.filter === "all" || e.category === calendarState.filter
+  );
+  if (!events.length) {
+    pushNotification({ title: "내보낼 이벤트 없음", body: "현재 필터 기준으로 표시할 이벤트가 없습니다.", tone: "warning" });
+    return;
+  }
+  const icsEscape = (s) => String(s || "").replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\n/g, "\\n");
+  const asDate = (key) => (key || "").replace(/-/g, "");
+  const now = new Date();
+  const dtStamp = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}${String(now.getUTCDate()).padStart(2, "0")}T${String(now.getUTCHours()).padStart(2, "0")}${String(now.getUTCMinutes()).padStart(2, "0")}${String(now.getUTCSeconds()).padStart(2, "0")}Z`;
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//GWJ2 OB Hub//Calendar Export//KO",
+    "CALSCALE:GREGORIAN",
+  ];
+  events.forEach((ev) => {
+    const start = asDate(ev.date);
+    // All-day event: next-day as DTEND per RFC 5545
+    const d = new Date(`${ev.date}T00:00:00`);
+    d.setDate(d.getDate() + 1);
+    const end = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    const cat = getCategoryById(ev.category);
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${ev.id}@gwj2obhub`,
+      `DTSTAMP:${dtStamp}`,
+      `DTSTART;VALUE=DATE:${start}`,
+      `DTEND;VALUE=DATE:${end}`,
+      `SUMMARY:${icsEscape(ev.title)}`,
+      `DESCRIPTION:${icsEscape(ev.note || "")}`,
+      `CATEGORIES:${icsEscape(cat.label)}`,
+      "END:VEVENT",
+    );
+  });
+  lines.push("END:VCALENDAR");
+  const blob = new Blob([lines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `gwj2-calendar-${asDate(dateKeyFromDate(new Date()))}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  pushNotification({ title: "캘린더 내보내기 완료", body: `${events.length}개 이벤트가 .ics 로 저장되었습니다.`, tone: "success" });
 };
 
 const likeTooltipText = (likes) => {
@@ -1800,7 +2400,7 @@ const renderAttachmentHtml = (attachments) => {
   if (attachments.image) {
     blocks.push(`
       <div class="attachment-image-box">
-        <img class="post-attachment-image" src="${escapeHtml(attachments.image.dataUrl)}" alt="${escapeHtml(attachments.image.name)}" loading="lazy">
+        <img class="post-attachment-image" src="${escapeHtml(attachments.image.dataUrl)}" alt="${escapeHtml(attachments.image.name)}" loading="lazy" data-lightbox-src="${escapeHtml(attachments.image.dataUrl)}" data-lightbox-alt="${escapeHtml(attachments.image.name)}">
       </div>
     `);
   }
@@ -1903,6 +2503,9 @@ const renderPost = (post) => {
   const liked = Boolean(state.user && post.likes.includes(state.user.id));
   const tooltip = renderLikeTooltipHtml(post.likes);
   const canDelete = canManageContent(post.authorId);
+  const canEdit = Boolean(state.user && state.user.id === post.authorId);
+  const isEditing = state.editingPostId === post.id;
+  const bookmarked = isBookmarked(post.id);
   const commentsHtml = post.comments.length
     ? post.comments.map((comment) => renderComment(post.id, comment)).join("")
     : `<div class="empty-comments">아직 댓글이 없습니다. 첫 댓글을 남겨보세요.</div>`;
@@ -1911,9 +2514,14 @@ const renderPost = (post) => {
   const attachmentCount = Number(Boolean(post.attachments.image)) + Number(Boolean(post.attachments.file));
   const metaBits = [`댓글 ${post.comments.length}`];
   if (attachmentCount > 0) metaBits.push(`첨부 ${attachmentCount}`);
+  const editedBadge = post.editedAt
+    ? `<span class="post-edited-badge" title="${escapeHtml(new Date(post.editedAt).toLocaleString())}">수정됨</span>`
+    : "";
+  const titleHtml = highlightSearchMatches(escapeHtml(post.title));
+  const contentHtml = highlightSearchMatches(richText(post.content));
 
   return `
-    <article class="post-card">
+    <article class="post-card${isEditing ? " is-editing" : ""}" id="post-${escapeHtml(post.id)}" data-post-id="${escapeHtml(post.id)}">
       <div class="post-head">
         <div class="post-author">
           <div class="post-avatar">
@@ -1928,14 +2536,19 @@ const renderPost = (post) => {
               <strong class="post-author-name">${escapeHtml(profile.nickname)}</strong>
               <span class="position-badge">${escapeHtml(profile.position)}</span>
             </div>
-            <span class="post-meta">${escapeHtml(relativeTime(post.createdAt))}</span>
+            <span class="post-meta">${escapeHtml(relativeTime(post.createdAt))}${editedBadge ? "" : ""}</span>
           </div>
         </div>
-        ${
-          canDelete
-            ? `<button class="inline-action danger-action" type="button" data-delete-post data-post-id="${escapeHtml(post.id)}">게시글 삭제</button>`
-            : ""
-        }
+        <div class="post-head-actions" style="display:inline-flex;gap:6px;align-items:center;">
+          <button class="post-bookmark${bookmarked ? " is-active" : ""}" type="button" data-bookmark-toggle="${escapeHtml(post.id)}" aria-pressed="${bookmarked}" aria-label="북마크">
+            <svg viewBox="0 0 24 24" fill="${bookmarked ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          </button>
+          <button class="post-bookmark" type="button" data-share-post="${escapeHtml(post.id)}" aria-label="링크 복사" title="링크 복사">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </button>
+          ${canEdit && !isEditing ? `<button class="post-bookmark" type="button" data-edit-post="${escapeHtml(post.id)}" aria-label="수정" title="수정"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : ""}
+          ${canDelete ? `<button class="inline-action danger-action" type="button" data-delete-post data-post-id="${escapeHtml(post.id)}">삭제</button>` : ""}
+        </div>
       </div>
       <div class="post-badge-row">
         <span class="board-badge" style="background:${escapeHtml(board.badgeStyle.background)};color:${escapeHtml(
@@ -1948,9 +2561,11 @@ const renderPost = (post) => {
               )};border-color:${escapeHtml(subtab.badgeStyle.borderColor)};">${escapeHtml(subtab.label)}</span>`
             : ""
         }
+        ${editedBadge}
       </div>
-      <h3 class="post-title">${escapeHtml(post.title)}</h3>
-      <div class="post-content">${richText(post.content)}</div>
+      <h3 class="post-title">${titleHtml}</h3>
+      <div class="post-content">${contentHtml}</div>
+      ${isEditing ? renderEditForm(post) : ""}
       ${renderAttachmentHtml(post.attachments)}
       <div class="post-reactions" data-post-reactions="${escapeHtml(post.id)}">
         ${renderPostReactionChips(post)}
@@ -1986,13 +2601,24 @@ const renderPost = (post) => {
 };
 
 const renderPosts = (visiblePosts) => {
-  el.postList.innerHTML = visiblePosts.length
-    ? visiblePosts.map(renderPost).join("")
-    : `<div class="empty-state">${
-        state.feedFilter === "mentions"
-          ? "선택한 탭에서 나를 멘션한 글이 아직 없습니다."
-          : "선택한 탭에 아직 게시글이 없습니다. 첫 글을 남겨보세요."
-      }</div>`;
+  const total = visiblePosts.length;
+  const shown = Math.min(state.feedVisibleCount || FEED_PAGE_SIZE, total);
+  const page = visiblePosts.slice(0, shown);
+
+  const emptyMessage = (() => {
+    if ((state.feedSearch || "").trim()) return `"${escapeHtml(state.feedSearch)}" — 일치하는 글이 없습니다.`;
+    if (state.feedFilter === "mentions") return "선택한 탭에서 나를 멘션한 글이 아직 없습니다.";
+    if (state.feedFilter === "bookmarks") return "북마크한 글이 아직 없습니다. ⭐ 버튼을 눌러 모아보세요.";
+    return "선택한 탭에 아직 게시글이 없습니다. 첫 글을 남겨보세요.";
+  })();
+
+  const loadMoreHtml = total > shown
+    ? `<button class="feed-load-more" type="button" data-feed-load-more>더 보기 (${total - shown}건 남음)</button>`
+    : "";
+
+  el.postList.innerHTML = page.length
+    ? page.map(renderPost).join("") + loadMoreHtml
+    : `<div class="empty-state">${emptyMessage}</div>`;
 
   el.filterButtons.forEach((button) => {
     const active = button.dataset.feedFilter === state.feedFilter;
@@ -2041,6 +2667,13 @@ const refreshAll = () => {
   renderNotificationRail();
   refreshSideMentionBadge();
   mirrorSnopCompact();
+  // Pull the latest calendar events from the bridge (or cache) so remote adds/
+  // removes by other clients flow into the UI on every snapshot refresh.
+  try {
+    calendarState.events = readCalendarEvents();
+    renderCalendar();
+  } catch (_) {}
+  try { renderPresenceChip(); renderTypingIndicators(); } catch (_) {}
   scheduleRevealSweep();
 };
 
@@ -2098,6 +2731,11 @@ const openSettings = () => {
   el.settingsForm.elements.nickname.value = user.nickname;
   updateSettingsPreview(user.nickname);
   setTimedFeedback("settings", el.settingsFeedback, "");
+  // Hydrate notification mute checkboxes from storage
+  const muted = readMutedTones();
+  document.querySelectorAll("[data-mute-category]").forEach((cb) => {
+    cb.checked = muted.has(cb.dataset.muteCategory);
+  });
   el.settingsOverlay.hidden = false;
 };
 
@@ -2122,6 +2760,93 @@ const resetComposer = () => {
   hideAllMentionBoxes();
   renderComposeAttachments();
   renderComposePreview();
+  clearComposeDraft();
+  hideDraftBanner();
+};
+
+/* ========================================================
+   COMPOSER DRAFT AUTOSAVE
+   Saves title/content to localStorage (per-user) as the user types,
+   so refreshing the page doesn't nuke half-written posts.
+   ======================================================== */
+const draftStorageKey = () => {
+  const suffix = state.user?.id ? `:${state.user.id}` : ":anon";
+  return `${STORAGE_KEYS.composeDraft}${suffix}`;
+};
+let draftSaveTimer = null;
+const saveComposeDraft = () => {
+  try {
+    const title = el.postTitle?.value ?? "";
+    const content = el.postContent?.value ?? "";
+    if (!title.trim() && !content.trim()) {
+      window.localStorage.removeItem(draftStorageKey());
+      return;
+    }
+    const draft = {
+      title,
+      content,
+      board: state.activeBoard,
+      subtab: state.activeBoard === "handover" ? state.activeHandoverTab : "",
+      savedAt: Date.now(),
+    };
+    window.localStorage.setItem(draftStorageKey(), JSON.stringify(draft));
+  } catch (_) {}
+};
+const scheduleSaveComposeDraft = () => {
+  if (draftSaveTimer) window.clearTimeout(draftSaveTimer);
+  draftSaveTimer = window.setTimeout(saveComposeDraft, 500);
+};
+const clearComposeDraft = () => {
+  try { window.localStorage.removeItem(draftStorageKey()); } catch (_) {}
+};
+const readComposeDraft = () => {
+  try {
+    const raw = window.localStorage.getItem(draftStorageKey());
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || (typeof parsed.title !== "string" && typeof parsed.content !== "string")) return null;
+    if (!parsed.title?.trim() && !parsed.content?.trim()) return null;
+    return parsed;
+  } catch (_) { return null; }
+};
+const showDraftBanner = (draft) => {
+  const host = $("[data-draft-banner]");
+  if (!host) return;
+  const when = new Date(draft.savedAt || Date.now());
+  const ago = (() => {
+    const diff = Math.max(0, Date.now() - when.getTime());
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "방금";
+    if (mins < 60) return `${mins}분 전`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}시간 전`;
+    return `${Math.floor(hrs / 24)}일 전`;
+  })();
+  host.hidden = false;
+  host.innerHTML = `
+    <span class="draft-banner-icon" aria-hidden="true">✎</span>
+    <span class="draft-banner-text">작성 중이던 글이 있어요 <em>· ${escapeHtml(ago)}</em></span>
+    <button type="button" class="draft-banner-btn is-primary" data-draft-restore>이어서 쓰기</button>
+    <button type="button" class="draft-banner-btn" data-draft-discard>버리기</button>
+  `;
+};
+const hideDraftBanner = () => {
+  const host = $("[data-draft-banner]");
+  if (host) { host.hidden = true; host.innerHTML = ""; }
+};
+const restoreComposeDraft = () => {
+  const draft = readComposeDraft();
+  if (!draft) return;
+  if (el.postTitle) el.postTitle.value = draft.title || "";
+  if (el.postContent) el.postContent.value = draft.content || "";
+  renderComposePreview();
+  hideDraftBanner();
+  el.postTitle?.focus();
+};
+const offerComposeDraft = () => {
+  const draft = readComposeDraft();
+  if (!draft) return;
+  showDraftBanner(draft);
 };
 
 const clearComposeImage = () => {
@@ -2297,11 +3022,39 @@ const hideAllMentionBoxes = () => {
 
 const mentionCandidates = (query) => {
   const lower = clean(query).toLowerCase();
-  return allProfiles().filter((profile) => {
+  const pool = allProfiles().filter((profile) => {
     if (!profile.nickname) return false;
     if (state.user && profile.id === state.user.id) return false;
-    return !lower || profile.nickname.toLowerCase().includes(lower);
+    return true;
   });
+  if (!lower) {
+    return pool.slice().sort((a, b) => a.nickname.localeCompare(b.nickname, "ko"));
+  }
+  // Rank: startsWith beats includes; position (role) match is secondary signal.
+  const scored = pool
+    .map((p) => {
+      const nick = p.nickname.toLowerCase();
+      const role = (p.position || "").toLowerCase();
+      let score = 0;
+      if (nick === lower) score = 100;
+      else if (nick.startsWith(lower)) score = 80;
+      else if (nick.includes(lower)) score = 50;
+      else if (role.startsWith(lower)) score = 30;
+      else if (role.includes(lower)) score = 15;
+      return { p, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.p.nickname.localeCompare(b.p.nickname, "ko"))
+    .map((x) => x.p);
+  return scored;
+};
+
+// Wraps matching substring with a <em class="mention-match"> for visual emphasis.
+const highlightMentionMatch = (escapedText, query) => {
+  const q = clean(query);
+  if (!q || !escapedText) return escapedText;
+  const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return escapedText.replace(new RegExp(`(${safe})`, "ig"), '<em class="mention-match">$1</em>');
 };
 
 const updateMentionBox = (textarea) => {
@@ -2314,23 +3067,28 @@ const updateMentionBox = (textarea) => {
   if (!match) {
     box.hidden = true;
     box.innerHTML = "";
+    box.dataset.activeIndex = "";
     return;
   }
-  const candidates = mentionCandidates(match[2]).slice(0, 6);
+  const query = match[2];
+  const candidates = mentionCandidates(query).slice(0, 8);
   if (!candidates.length) {
-    box.hidden = true;
-    box.innerHTML = "";
+    // When nothing matches the query, show "no results" row so users know autocomplete is on.
+    box.hidden = false;
+    box.innerHTML = `<div class="mention-item is-empty" aria-disabled="true"><span class="mention-item-copy"><strong class="mention-item-name">결과 없음</strong><span class="mention-item-role">"${escapeHtml(query)}"</span></span></div>`;
+    box.dataset.activeIndex = "";
     return;
   }
+  const activeIdx = 0;
   box.innerHTML = candidates
     .map(
-      (profile) => `
-        <button class="mention-item" type="button" data-mention-select data-mention-target="${escapeHtml(
+      (profile, i) => `
+        <button class="mention-item${i === activeIdx ? " is-active" : ""}" type="button" data-mention-select data-mention-target="${escapeHtml(
           key,
-        )}" data-mention-name="${escapeHtml(profile.nickname)}">
+        )}" data-mention-name="${escapeHtml(profile.nickname)}" data-mention-index="${i}">
           <span class="mention-item-copy">
-            <strong class="mention-item-name">${escapeHtml(profile.nickname)}</strong>
-            <span class="mention-item-role">${escapeHtml(profile.position)}</span>
+            <strong class="mention-item-name">${highlightMentionMatch(escapeHtml(profile.nickname), query)}</strong>
+            <span class="mention-item-role">${highlightMentionMatch(escapeHtml(profile.position), query)}</span>
           </span>
           <span class="mention-kind">멘션</span>
         </button>
@@ -2338,6 +3096,45 @@ const updateMentionBox = (textarea) => {
     )
     .join("");
   box.hidden = false;
+  box.dataset.activeIndex = String(activeIdx);
+  box.dataset.target = key;
+};
+
+// Keyboard navigation for the active mention popover: arrow keys + Enter to pick.
+const handleMentionKeydown = (event) => {
+  const target = event.target;
+  if (!target || !target.classList?.contains("js-mention-input")) return;
+  const key = target.dataset.composeInput;
+  const box = findMentionBox(key);
+  if (!box || box.hidden) return;
+  const items = Array.from(box.querySelectorAll(".mention-item:not(.is-empty)"));
+  if (!items.length) return;
+  const currentIdx = Number(box.dataset.activeIndex || 0);
+
+  const setActive = (idx) => {
+    const n = (idx + items.length) % items.length;
+    items.forEach((el, i) => el.classList.toggle("is-active", i === n));
+    box.dataset.activeIndex = String(n);
+    items[n].scrollIntoView({ block: "nearest" });
+  };
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    setActive(currentIdx + 1);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    setActive(currentIdx - 1);
+  } else if (event.key === "Enter" || event.key === "Tab") {
+    // Enter inserts mention, Tab as well. Avoid double-firing with Cmd+Enter.
+    if (event.metaKey || event.ctrlKey) return;
+    const active = items[currentIdx] || items[0];
+    const name = active?.dataset.mentionName;
+    if (!name) return;
+    event.preventDefault();
+    insertMention(key, name);
+    box.hidden = true;
+    box.innerHTML = "";
+  }
 };
 
 const insertMention = (key, nickname) => {
@@ -2551,6 +3348,7 @@ const submitComment = (event) => {
   savePosts(posts);
   delete state.commentDrafts[postId];
   delete state.commentFeedback[postId];
+  try { clearTyping(postId); } catch (_) {}
   refreshAll();
   pushNotification({
     title: "댓글 등록 완료",
@@ -2615,6 +3413,7 @@ const submitLogin = async (event) => {
     resetAuthForms();
     refreshAll();
     el.postTitle.focus();
+    try { startPresence(); } catch (_) {}
   } catch (error) {
     setAuthFeedback("login", error.message || "로그인에 실패했습니다.");
   } finally {
@@ -2641,6 +3440,7 @@ const submitSignup = async (event) => {
     resetAuthForms();
     refreshAll();
     el.postTitle.focus();
+    try { startPresence(); } catch (_) {}
   } catch (error) {
     setAuthFeedback("signup", error.message || "회원가입에 실패했습니다.");
   } finally {
@@ -2665,12 +3465,14 @@ const saveSettings = async (event) => {
   }
 
   const wantsPasswordChange = Boolean(currentPassword || nextPassword || confirmPassword);
+  let hashedNextPassword = null;
   if (wantsPasswordChange) {
     if (!currentPassword || !nextPassword || !confirmPassword) {
       setTimedFeedback("settings", el.settingsFeedback, "비밀번호를 변경하려면 세 칸을 모두 입력해 주세요.");
       return;
     }
-    if (currentPassword !== user.password) {
+    const matches = await verifyPassword(currentPassword, user.password);
+    if (!matches) {
       setTimedFeedback("settings", el.settingsFeedback, "현재 비밀번호가 일치하지 않습니다.");
       return;
     }
@@ -2678,6 +3480,7 @@ const saveSettings = async (event) => {
       setTimedFeedback("settings", el.settingsFeedback, "새 비밀번호 확인이 일치하지 않습니다.");
       return;
     }
+    hashedNextPassword = await hashPassword(nextPassword);
   }
 
   const nextUsers = usersAll().map((item) =>
@@ -2685,7 +3488,7 @@ const saveSettings = async (event) => {
       ? {
           ...item,
           nickname,
-          password: wantsPasswordChange ? nextPassword : item.password,
+          password: wantsPasswordChange ? hashedNextPassword : item.password,
           avatarDataUrl: state.settings.avatarDataUrl,
         }
       : item,
@@ -2706,6 +3509,7 @@ const logout = async () => {
   if (!state.user) return;
   el.logoutButton.disabled = true;
   try {
+    try { await stopPresence(); } catch (_) {}
     await authService.logout();
     state.user = null;
     closeSettings();
@@ -2729,6 +3533,7 @@ const handleGlobalInput = (event) => {
   if (target === el.postTitle || target === el.postContent) {
     setTimedFeedback("post", el.postFeedback, "");
     renderComposePreview();
+    scheduleSaveComposeDraft();
   }
 
   if (target === el.postContent) {
@@ -2742,6 +3547,12 @@ const handleGlobalInput = (event) => {
     if (postId) {
       state.commentDrafts[postId] = target.value;
       delete state.commentFeedback[postId];
+      // Broadcast typing activity (or clear if the textarea becomes empty).
+      if (target.value && target.value.trim()) {
+        try { broadcastTyping(postId); } catch (_) {}
+      } else {
+        try { clearTyping(postId); } catch (_) {}
+      }
     }
     updateMentionBox(target);
     return;
@@ -2750,11 +3561,50 @@ const handleGlobalInput = (event) => {
   if (target === el.settingsForm?.elements.nickname) {
     updateSettingsPreview(target.value);
   }
+
+  // Notification mute toggles
+  if (target.matches?.("[data-mute-category]")) {
+    toggleMutedTone(target.dataset.muteCategory, target.checked);
+    return;
+  }
+
+  // Feed search
+  if (target.matches?.("[data-feed-search-input]")) {
+    state.feedSearch = target.value || "";
+    state.feedVisibleCount = FEED_PAGE_SIZE;
+    const host = $("[data-feed-search]");
+    if (host) host.classList.toggle("has-value", !!state.feedSearch.trim());
+    renderPosts(getVisiblePosts(postsAll()));
+    renderSearchMeta();
+  }
+};
+
+const renderSearchMeta = () => {
+  const meta = $("[data-feed-search-meta]");
+  if (!meta) return;
+  const q = (state.feedSearch || "").trim();
+  if (!q) { meta.hidden = true; meta.textContent = ""; return; }
+  const count = getVisiblePosts(postsAll()).length;
+  meta.hidden = false;
+  meta.innerHTML = count
+    ? `<b>${count}</b>건이 "${escapeHtml(q)}"와 일치합니다.`
+    : `"${escapeHtml(q)}" — 일치하는 글이 없습니다.`;
 };
 
 const handleGlobalClick = (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
+
+  // Draft banner actions
+  if (target.closest("[data-draft-restore]")) {
+    restoreComposeDraft();
+    return;
+  }
+  if (target.closest("[data-draft-discard]")) {
+    clearComposeDraft();
+    hideDraftBanner();
+    return;
+  }
 
   const authTab = target.closest("[data-auth-tab]");
   if (authTab) {
@@ -2792,7 +3642,76 @@ const handleGlobalClick = (event) => {
   const filterButton = target.closest("[data-feed-filter]");
   if (filterButton) {
     state.feedFilter = filterButton.dataset.feedFilter;
+    state.feedVisibleCount = FEED_PAGE_SIZE;
     refreshAll();
+    return;
+  }
+
+  // Clear search
+  if (target.closest("[data-feed-search-clear]")) {
+    state.feedSearch = "";
+    const input = $("[data-feed-search-input]");
+    if (input) input.value = "";
+    $("[data-feed-search]")?.classList.remove("has-value");
+    state.feedVisibleCount = FEED_PAGE_SIZE;
+    refreshAll();
+    return;
+  }
+
+  // Bookmark toggle
+  const bookmarkBtn = target.closest("[data-bookmark-toggle]");
+  if (bookmarkBtn) {
+    toggleBookmark(bookmarkBtn.dataset.bookmarkToggle);
+    return;
+  }
+
+  // Share (copy anchor link)
+  const shareBtn = target.closest("[data-share-post]");
+  if (shareBtn) {
+    copyPostLink(shareBtn.dataset.sharePost);
+    return;
+  }
+
+  // Load more (pagination)
+  if (target.closest("[data-feed-load-more]")) {
+    state.feedVisibleCount += FEED_PAGE_SIZE;
+    renderPosts(getVisiblePosts(postsAll()));
+    return;
+  }
+
+  // Edit post
+  const editBtn = target.closest("[data-edit-post]");
+  if (editBtn) {
+    state.editingPostId = editBtn.dataset.editPost;
+    renderPosts(getVisiblePosts(postsAll()));
+    return;
+  }
+  const editCancel = target.closest("[data-edit-cancel]");
+  if (editCancel) {
+    state.editingPostId = null;
+    renderPosts(getVisiblePosts(postsAll()));
+    return;
+  }
+  const editSave = target.closest("[data-edit-save]");
+  if (editSave) {
+    saveEditedPost(editSave.dataset.editSave);
+    return;
+  }
+
+  // Lightbox
+  const lbTrigger = target.closest("[data-lightbox-src]");
+  if (lbTrigger) {
+    openLightbox(lbTrigger.dataset.lightboxSrc, lbTrigger.dataset.lightboxAlt || "");
+    return;
+  }
+  if (target.closest("[data-lightbox-close]") || target.matches("[data-lightbox]")) {
+    closeLightbox();
+    return;
+  }
+
+  // ICS export
+  if (target.closest("[data-calendar-export]")) {
+    exportCalendarIcs();
     return;
   }
 
@@ -2914,6 +3833,10 @@ const handleGlobalClick = (event) => {
 };
 
 const handleGlobalKeydown = (event) => {
+  // Mention autocomplete keyboard nav takes priority over other shortcuts
+  handleMentionKeydown(event);
+  if (event.defaultPrevented) return;
+
   if (event.key === "Escape") {
     hideAllMentionBoxes();
     closeAllEmojiPickers();
@@ -2927,6 +3850,31 @@ const handleGlobalKeydown = (event) => {
       return;
     }
     if (!el.settingsOverlay.hidden) closeSettings();
+    // Also close the lightbox when pressing Escape
+    const lightbox = $("[data-lightbox]");
+    if (lightbox && !lightbox.hidden) closeLightbox();
+  }
+
+  // Cmd/Ctrl + Enter to submit the active form (post compose, comment compose).
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    const target = event.target;
+    if (!target) return;
+    // Post composer
+    if (target === el.postTitle || target === el.postContent) {
+      event.preventDefault();
+      if (typeof el.postForm.requestSubmit === "function") el.postForm.requestSubmit();
+      else el.postForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+      return;
+    }
+    // Comment composer
+    if (target.matches?.("textarea[data-compose-input^='comment-']")) {
+      const form = target.closest("[data-comment-form]");
+      if (form) {
+        event.preventDefault();
+        if (typeof form.requestSubmit === "function") form.requestSubmit();
+        else form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+      }
+    }
   }
 };
 
@@ -3700,6 +4648,12 @@ const initialize = async () => {
     syncLockState(true);
   }
   refreshAll();
+  // Offer to restore a saved composer draft after the user/UI is ready.
+  if (state.user) offerComposeDraft();
+  // Kick off presence heartbeat once the session is confirmed and bridge is up.
+  if (state.user && bridge) { try { startPresence(); } catch (_) {} }
+  // If the URL has ?post=<id>, scroll into view once posts are rendered.
+  try { scrollToLinkedPost(); } catch (_) {}
 };
 
 initialize();

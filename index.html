@@ -229,6 +229,8 @@
             </div>
           </div>
 
+          <div class="draft-banner" data-draft-banner hidden></div>
+
           <div class="composer-layout">
             <form class="post-form" data-post-form>
               <label class="input-group">
@@ -329,8 +331,16 @@
               <button class="filter-button is-active" type="button" data-feed-filter="latest">&#xCD5C;&#xC2E0;&#xC21C;</button>
               <button class="filter-button" type="button" data-feed-filter="likes">&#xC88B;&#xC544;&#xC694;&#xC21C;</button>
               <button class="filter-button" type="button" data-feed-filter="mentions">&#xB0B4; &#xBA58;&#xC158;&#xB9CC;</button>
+              <button class="filter-button" type="button" data-feed-filter="bookmarks">&#xBD81;&#xB9C8;&#xD06C;</button>
             </div>
           </div>
+
+          <div class="feed-search" data-feed-search>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" data-feed-search-input placeholder="제목·본문·작성자 검색" aria-label="게시글 검색">
+            <button type="button" class="feed-search-clear" data-feed-search-clear aria-label="검색어 지우기">✕</button>
+          </div>
+          <p class="feed-search-results-meta" data-feed-search-meta hidden></p>
 
           <div class="post-list" data-post-list></div>
         </section>
@@ -345,6 +355,15 @@
             <span class="server-status-detail" data-server-status-detail>Firebase Firestore</span>
           </div>
         </section>
+
+        <div class="presence-chip" data-presence-chip hidden aria-live="polite">
+          <span class="presence-dot is-online" aria-hidden="true"></span>
+          <span class="presence-chip-copy">
+            <strong data-presence-count>0</strong>
+            <span>명 온라인</span>
+          </span>
+          <span class="presence-chip-names" data-presence-names></span>
+        </div>
 
         <section class="profile-card">
           <div class="section-title-row">
@@ -401,7 +420,10 @@
           <div class="calendar-events">
             <div class="calendar-events-head">
               <strong class="calendar-events-title" data-calendar-events-title>이번 달 이벤트</strong>
-              <button class="calendar-add-btn" type="button" data-calendar-add>+ 이벤트 추가</button>
+              <div style="display:inline-flex;gap:6px;">
+                <button class="calendar-add-btn" type="button" data-calendar-export title="ICS 내보내기" aria-label="ICS 내보내기" style="background:transparent;color:var(--text-2);border:1px solid var(--border);">⇩ .ics</button>
+                <button class="calendar-add-btn" type="button" data-calendar-add>+ 이벤트 추가</button>
+              </div>
             </div>
             <ul class="calendar-event-list" data-calendar-event-list></ul>
           </div>
@@ -505,6 +527,16 @@
             <input class="text-input" type="password" name="confirmPassword" autocomplete="new-password" placeholder="&#xC0C8; &#xBE44;&#xBC00;&#xBC88;&#xD638; &#xD655;&#xC778;">
           </label>
         </div>
+
+        <fieldset class="settings-fieldset" data-notification-settings>
+          <legend class="input-label">알림 설정</legend>
+          <p class="settings-fieldset-hint">오른쪽 상단 토스트에서 보이지 않게 할 항목을 선택하세요.</p>
+          <label class="settings-toggle"><input type="checkbox" data-mute-category="success"> <span>게시글·SNOP 저장 알림 (success)</span></label>
+          <label class="settings-toggle"><input type="checkbox" data-mute-category="info"> <span>댓글·링크 복사 알림 (info)</span></label>
+          <label class="settings-toggle"><input type="checkbox" data-mute-category="danger"> <span>삭제 알림 (danger)</span></label>
+          <label class="settings-toggle"><input type="checkbox" data-mute-category="warning"> <span>경고 알림 (warning)</span></label>
+          <label class="settings-toggle"><input type="checkbox" data-mute-category="mention"> <span>나를 멘션한 알림 (mention)</span></label>
+        </fieldset>
 
         <p class="form-feedback" data-settings-feedback hidden></p>
 
@@ -659,12 +691,14 @@
       "gwj2-ob-community-snop": "snop",
       "gwj2-ob-community-notifications": "notifications",
       "gwj2-ob-community-users": "users",
+      "gwj2-ob-community-calendar": "calendar",
     };
     const DOC_ID_FIELDS = {
       "gwj2-ob-community-posts": "id",
       "gwj2-ob-community-snop": "date",
       "gwj2-ob-community-notifications": "id",
       "gwj2-ob-community-users": "id",
+      "gwj2-ob-community-calendar": "id",
     };
 
     const app = initializeApp(firebaseConfig);
@@ -797,6 +831,42 @@
       if (!navigator.onLine) setStatus("error", "offline");
     }
 
+    // Raw helpers for presence/typing-style ephemeral collections that don't
+    // need to live inside the full-rewrite sync cache.
+    const setDocRaw = async (colName, docId, data) => {
+      if (!colName || !docId) return;
+      try {
+        await setDoc(doc(db, colName, sanitizeDocId(docId)), JSON.parse(JSON.stringify(data || {})));
+      } catch (err) {
+        console.warn("Firestore setDocRaw failed", colName, docId, err);
+      }
+    };
+    const deleteDocRaw = async (colName, docId) => {
+      if (!colName || !docId) return;
+      try {
+        await deleteDoc(doc(db, colName, sanitizeDocId(docId)));
+      } catch (err) {
+        console.warn("Firestore deleteDocRaw failed", colName, docId, err);
+      }
+    };
+    const subscribeRaw = (colName, cb) => {
+      if (!colName || typeof cb !== "function") return () => {};
+      try {
+        return onSnapshot(
+          collection(db, colName),
+          (snap) => {
+            const items = [];
+            snap.forEach((d) => items.push({ __id: d.id, ...d.data() }));
+            try { cb(items); } catch (_) {}
+          },
+          (err) => { console.warn("subscribeRaw error", colName, err); },
+        );
+      } catch (err) {
+        console.warn("subscribeRaw setup failed", colName, err);
+        return () => {};
+      }
+    };
+
     window.__gwj2Firebase = {
       ready,
       read,
@@ -805,6 +875,9 @@
       onStatusChange,
       getStatus: () => ({ status, detail: statusDetail }),
       keys: Object.keys(STORAGE_TO_COLLECTION),
+      setDocRaw,
+      deleteDocRaw,
+      subscribeRaw,
     };
     // Fire a DOM event so the classic script can hook in even if it already loaded.
     try { window.dispatchEvent(new Event("gwj2-firebase-ready")); } catch (_) {}
